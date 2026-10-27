@@ -6,6 +6,7 @@ struct LoginView: View {
     @State private var email = ""
     @State private var password = ""
     @State private var isRegistering = false
+    @State private var slow = false
     @FocusState private var focus: Field?
 
     private enum Field { case email, password }
@@ -78,6 +79,12 @@ struct LoginView: View {
                         .controlSize(.large)
                         .disabled(!canSubmit)
 
+                        if slow && auth.isLoading {
+                            Label("Waking up the server. The first sign-in after a while can take up to a minute.", systemImage: "clock")
+                                .font(.footnote).foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 6)
+                        }
+
                         Button {
                             auth.startDemo()
                         } label: {
@@ -107,6 +114,12 @@ struct LoginView: View {
                 .padding(.bottom, 40)
             }
             .scrollDismissesKeyboard(.interactively)
+            .task(id: auth.isLoading) {
+                slow = false
+                guard auth.isLoading else { return }
+                try? await Task.sleep(for: .seconds(4))
+                if !Task.isCancelled { slow = true }
+            }
         }
     }
 

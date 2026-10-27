@@ -146,7 +146,43 @@ export const budgets = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("budgets_user_idx").on(t.userId)]
+  (t) => [
+    index("budgets_user_idx").on(t.userId),
+    uniqueIndex("budgets_user_category_idx").on(t.userId, t.categoryId),
+  ]
+);
+
+// ─── User settings (income override, profile) ─────────────────────────────────
+
+export const userSettings = pgTable("user_settings", {
+  userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  incomeOverride: numeric("income_override", { precision: 18, scale: 2 }),
+  birthYear: integer("birth_year"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ─── Vehicles (manual asset with VIN + mileage) ───────────────────────────────
+
+export const vehicles = pgTable(
+  "vehicles",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    accountId: uuid("account_id").notNull().references(() => accounts.id, { onDelete: "cascade" }),
+    vin: text("vin").notNull(),
+    year: integer("year").notNull(),
+    make: text("make").notNull(),
+    model: text("model").notNull(),
+    trim: text("trim"),
+    miles: integer("miles").notNull(),
+    valuationSource: text("valuation_source").notNull().default("estimate"),
+    valuedAt: timestamp("valued_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("vehicles_user_idx").on(t.userId),
+    uniqueIndex("vehicles_account_idx").on(t.accountId),
+  ]
 );
 
 // ─── Net-worth snapshots ──────────────────────────────────────────────────────

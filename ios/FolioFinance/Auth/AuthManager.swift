@@ -55,6 +55,7 @@ final class AuthManager: ObservableObject {
     }
 
     func logout() {
+        UserDefaults.standard.set(false, forKey: "onboardingDone")
         accessToken = nil
         refreshToken = nil
         isDemo = false
@@ -114,6 +115,13 @@ struct AuthResponse: Decodable, Sendable {
 @MainActor
 enum DemoData {
     static func respond<T: Decodable>(to endpoint: Endpoint) throws -> T {
+        if endpoint.path == "/vehicles/lookup" {
+            let v: [String: Any] = ["vin": "1HGCV1F30MA000000", "year": 2021, "make": "Honda", "model": "Accord", "trim": "Sport", "miles": 41200,
+                                    "estimatedValue": 22400, "lowValue": 20200, "highValue": 24600, "source": "estimate"]
+            let data = try JSONSerialization.data(withJSONObject: v)
+            let decoder = JSONDecoder(); decoder.keyDecodingStrategy = .convertFromSnakeCase
+            return try decoder.decode(T.self, from: data)
+        }
         guard endpoint.method == "GET" else {
             throw APIError.server(403, "Demo mode is read-only. Create a free account to save your own data.")
         }
@@ -123,6 +131,10 @@ enum DemoData {
             object = ["snapshots": history(days: Int(query(path)["days"] ?? "") ?? 90)]
         } else if path == "/accounts" {
             object = ["accounts": accounts]
+        } else if path == "/insights" {
+            object = insights
+        } else if path == "/budgets" {
+            object = budgets
         } else if path.hasPrefix("/transactions") {
             let q = query(path)
             var rows = transactions
@@ -138,6 +150,31 @@ enum DemoData {
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         return try decoder.decode(T.self, from: data)
     }
+
+    private static let insights: [String: Any] = [
+        "income": ["monthly": 6300, "source": "detected", "confidence": "high",
+                   "sources": [["name": "Acme Corp Payroll", "monthly": 6300, "frequency": "biweekly"]]],
+        "outflow": ["monthlyAverage": 3770, "fixed": 2310, "variable": 1460,
+                    "byCategory": [["category": "Home", "monthlyAverage": 1850, "isFixed": true],
+                                   ["category": "Groceries", "monthlyAverage": 820, "isFixed": false]]],
+        "budget": ["total": 3560, "items": [["category": "Home", "amount": 1850], ["category": "Groceries", "amount": 760],
+                                           ["category": "Dining", "amount": 220], ["category": "Transport", "amount": 280],
+                                           ["category": "Bills & Utilities", "amount": 200], ["category": "Shopping", "amount": 250]]],
+        "health": ["savingsRate": 0.40, "emergencyFundMonths": 6.2, "creditUtilization": 0.12, "debtPaymentRatio": 0.09],
+        "investing": ["totalInvested": 103791,
+                      "allocation": [["label": "Cash", "amount": 4820, "percent": 3.4], ["label": "Savings", "amount": 18500, "percent": 13.1],
+                                     ["label": "Investments", "amount": 103791, "percent": 73.3], ["label": "Other assets", "amount": 14500, "percent": 10.2]],
+                      "notes": [["id": "match", "title": "Retirement saving looks strong", "detail": "You're putting away well over the 15% of income many people aim for.", "tone": "good"],
+                                ["id": "cash", "title": "A lot sits in savings", "detail": "Above six months of spending in cash can lag behind inflation. Some people move the extra into longer-term investments.", "tone": "info"]]],
+        "dataQuality": ["monthsOfData": 4, "transactionCount": 214],
+    ]
+
+    private static let budgets: [String: Any] = [
+        "month": String(dayString(Date()).prefix(7)),
+        "budgets": [["id": "b1", "category": "Home", "monthlyAmount": 1850, "spent": 1850], ["id": "b2", "category": "Groceries", "monthlyAmount": 760, "spent": 610],
+                    ["id": "b3", "category": "Dining", "monthlyAmount": 220, "spent": 187], ["id": "b4", "category": "Transport", "monthlyAmount": 280, "spent": 301],
+                    ["id": "b5", "category": "Shopping", "monthlyAmount": 250, "spent": 96]],
+    ]
 
     private static func query(_ path: String) -> [String: String] {
         guard let items = URLComponents(string: "https://demo.local" + path)?.queryItems else { return [:] }

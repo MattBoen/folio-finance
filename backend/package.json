@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "test:unit": "vitest run -c vitest.unit.config.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.12.0",

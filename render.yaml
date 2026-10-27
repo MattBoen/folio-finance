@@ -21,11 +21,11 @@ services:
       - key: ENCRYPTION_KEY
         generateValue: true
       - key: PLAID_CLIENT_ID
-        value: placeholder
+        sync: false
       - key: PLAID_SECRET
-        value: placeholder
+        sync: false
       - key: PLAID_ENV
-        value: sandbox
+        sync: false
       - key: APPLE_BUNDLE_ID
         value: com.mattboen.foliofinance
       - key: ALLOWED_ORIGINS

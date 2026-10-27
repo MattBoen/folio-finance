@@ -7,6 +7,10 @@ import { auth } from "./routes/auth.js";
 import { plaid } from "./routes/plaid.js";
 import { accountsRouter } from "./routes/accounts.js";
 import { transactionsRouter } from "./routes/transactions.js";
+import { insightsRouter } from "./routes/insights.js";
+import { budgetsRouter } from "./routes/budgets.js";
+import { settingsRouter } from "./routes/settings.js";
+import { vehiclesRouter } from "./routes/vehicles.js";
 
 const app = new Hono();
 
@@ -20,6 +24,10 @@ app.route("/auth", auth);
 app.route("/plaid", plaid);
 app.route("/accounts", accountsRouter);
 app.route("/transactions", transactionsRouter);
+app.route("/insights", insightsRouter);
+app.route("/budgets", budgetsRouter);
+app.route("/settings", settingsRouter);
+app.route("/vehicles", vehiclesRouter);
 
 app.onError((err, c) => {
   console.error("[unhandled]", err.message);

@@ -26,7 +26,7 @@ const accountSelect = {
   institutionName: sql<string | null>`coalesce(${plaidItems.institutionName}, ${accounts.officialName})`,
 };
 
-async function loadAccount(userId: string, id: string) {
+export async function loadAccount(userId: string, id: string) {
   const [row] = await db
     .select(accountSelect)
     .from(accounts)

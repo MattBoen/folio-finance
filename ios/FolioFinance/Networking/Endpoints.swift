@@ -17,12 +17,16 @@ struct Endpoint {
         Endpoint(method: "PATCH", path: path, body: try? JSONEncoder.snakeCase.encode(body))
     }
 
+    static func put<B: Encodable>(_ path: String, body: B) -> Endpoint {
+        Endpoint(method: "PUT", path: path, body: try? JSONEncoder.snakeCase.encode(body))
+    }
+
     static func delete(_ path: String) -> Endpoint {
         Endpoint(method: "DELETE", path: path, body: nil)
     }
 }
 
-private extension JSONEncoder {
+extension JSONEncoder {
     static let snakeCase: JSONEncoder = {
         let e = JSONEncoder()
         e.keyEncodingStrategy = .convertToSnakeCase
@@ -157,3 +161,46 @@ extension Endpoint {
 }
 
 private struct EmptyBody: Encodable {}
+
+// ── Plan: insights, budgets, income, vehicles ─────────────────────────────────
+
+extension Endpoint {
+    static var insights: Endpoint { .get("/insights") }
+    static var budgets: Endpoint { .get("/budgets") }
+    static var generateBudget: Endpoint { .post("/budgets/generate", body: EmptyBody()) }
+
+    static func saveBudget(_ items: [(category: String, amount: Double)]) -> Endpoint {
+        struct Item: Encodable { let category: String; let amount: Double }
+        struct Body: Encodable { let items: [Item] }
+        return .put("/budgets", body: Body(items: items.map { Item(category: $0.category, amount: $0.amount) }))
+    }
+
+    /// Pass nil to go back to the detected income.
+    static func setIncome(monthly: Double?) -> Endpoint {
+        struct Body: Encodable { let monthly: Double? }
+        return .put("/settings/income", body: Body(monthly: monthly))
+    }
+
+    static func setBirthYear(_ year: Int?) -> Endpoint {
+        struct Body: Encodable { let birthYear: Int? }
+        return .put("/settings/profile", body: Body(birthYear: year))
+    }
+
+    static func vehicleLookup(vin: String, miles: Int) -> Endpoint {
+        struct Body: Encodable { let vin: String; let miles: Int }
+        return .post("/vehicles/lookup", body: Body(vin: vin, miles: miles))
+    }
+
+    static func createVehicle(_ v: VehicleLookup, value: Double) -> Endpoint {
+        struct Body: Encodable {
+            let vin: String; let year: Int; let make: String; let model: String
+            let trim: String?; let miles: Int; let value: Double
+        }
+        return .post("/vehicles", body: Body(vin: v.vin, year: v.year, make: v.make, model: v.model, trim: v.trim, miles: v.miles, value: value))
+    }
+
+    static func updateVehicle(accountId: String, miles: Int, value: Double) -> Endpoint {
+        struct Body: Encodable { let miles: Int; let value: Double }
+        return .patch("/vehicles/\(accountId)", body: Body(miles: miles, value: value))
+    }
+}

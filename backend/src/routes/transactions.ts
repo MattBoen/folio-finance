@@ -7,6 +7,7 @@ import { db } from "../db/client.js";
 import { transactions, accounts, categories } from "../db/schema.js";
 import { requireAuth } from "../middleware/auth.js";
 import { takeNetWorthSnapshot } from "../services/plaid-sync.js";
+import { normalizeCategory } from "../services/categories.js";
 
 const router = new Hono();
 
@@ -39,11 +40,16 @@ function fromTx(q: any) {
     .leftJoin(plaidCat, eq(transactions.categoryId, plaidCat.id));
 }
 
+// Raw category names (Plaid, seeded, user-typed) are folded into Folio's small vocabulary on the way out.
+function withNormalizedCategory<T extends { categoryName: string | null }>(row: T): T {
+  return row && row.categoryName ? { ...row, categoryName: normalizeCategory(row.categoryName) } : row;
+}
+
 async function loadTransaction(userId: string, id: string) {
   const [row] = await fromTx(db.select(txSelect)).where(
     and(eq(transactions.id, id), eq(transactions.userId, userId), isNull(transactions.deletedAt))
   );
-  return row;
+  return withNormalizedCategory(row);
 }
 
 async function findOrCreateCategory(name: string): Promise<string> {
@@ -116,7 +122,7 @@ router.get(
       .from(transactions)
       .where(and(...conditions));
 
-    return c.json({ transactions: rows, total: count, limit, offset });
+    return c.json({ transactions: rows.map(withNormalizedCategory), total: count, limit, offset });
   }
 );
 
@@ -282,7 +288,20 @@ router.get(
       .groupBy(categoryNameExpr)
       .orderBy(desc(sql`sum(${transactions.amount})`));
 
-    return c.json({ summary: rows });
+    // Several raw categories can fold into one Folio category, so merge them.
+    const merged = new Map<string, { categoryName: string; total: number; count: number }>();
+    for (const r of rows) {
+      const name = normalizeCategory(r.categoryName);
+      const m = merged.get(name) ?? { categoryName: name, total: 0, count: 0 };
+      m.total += parseFloat(r.total);
+      m.count += r.count;
+      merged.set(name, m);
+    }
+    const summary = [...merged.values()]
+      .filter((m) => m.categoryName !== "Transfer" && m.categoryName !== "Income")
+      .sort((a, b) => b.total - a.total)
+      .map((m) => ({ categoryName: m.categoryName, total: m.total.toFixed(2), count: m.count }));
+    return c.json({ summary });
   }
 );
 

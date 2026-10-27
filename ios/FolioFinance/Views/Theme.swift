@@ -20,7 +20,7 @@ extension Color {
 // MARK: - Page wash (the soft color behind every screen, like the Mac app)
 
 enum Tone {
-    case balance, spending, activity, accounts
+    case balance, spending, activity, accounts, plan
 
     var wash: [Color] {
         switch self {
@@ -28,6 +28,7 @@ enum Tone {
         case .spending: [.green, .teal, .yellow, .blue]
         case .activity: [.teal, .green, .blue, .indigo]
         case .accounts: [.gray, .blue, .teal, .purple]
+        case .plan: [.indigo, .purple, .blue, .teal]
         }
     }
 }
@@ -189,12 +190,18 @@ struct BrandMark: View {
 
 struct ProfileMenu: View {
     @EnvironmentObject private var auth: AuthManager
+    @EnvironmentObject private var lock: AppLock
     @AppStorage("hideAmounts") private var hide = false
     @State private var confirmSignOut = false
 
     var body: some View {
         Menu {
             Toggle(isOn: $hide) { Label("Hide amounts", systemImage: "eye.slash") }
+            if !auth.isDemo {
+                Toggle(isOn: Binding(get: { lock.isEnabled }, set: { lock.isEnabled = $0 })) {
+                    Label("Require \(lock.biometryName)", systemImage: "faceid")
+                }
+            }
             if auth.isDemo {
                 Section("Sample data") { Text("Changes aren't saved in demo mode") }
             }

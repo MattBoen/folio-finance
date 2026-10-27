@@ -25,6 +25,9 @@
 		AA0000000000000000000030 /* PlaidLinkSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000001E /* PlaidLinkSheet.swift */; };
 		AA0000000000000000000031 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000001F /* Assets.xcassets */; };
 		AC0D1F5A3091270D0066B739 /* LinkKit in Frameworks */ = {isa = PBXBuildFile; productRef = AC0D1F593091270D0066B739 /* LinkKit */; };
+		AA0000000000000000000103 /* PlanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000102 /* PlanView.swift */; };
+		AA0000000000000000000105 /* Insights.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000104 /* Insights.swift */; };
+		AA0000000000000000000108 /* OnboardingFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000107 /* OnboardingFlow.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -46,6 +49,9 @@
 		AA000000000000000000001E /* PlaidLinkSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaidLinkSheet.swift; sourceTree = "<group>"; };
 		AA000000000000000000001F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AA000000000000000000002F /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		AA0000000000000000000102 /* PlanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanView.swift; sourceTree = "<group>"; };
+		AA0000000000000000000104 /* Insights.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Insights.swift; sourceTree = "<group>"; };
+		AA0000000000000000000107 /* OnboardingFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFlow.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -111,6 +117,7 @@
 		AA0000000000000000000034 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				AA0000000000000000000104 /* Insights.swift */,
 				AA000000000000000000001B /* Account.swift */,
 				AA000000000000000000001C /* Transaction.swift */,
 				AA000000000000000000001D /* PlaidItem.swift */,
@@ -121,6 +128,8 @@
 		AA0000000000000000000035 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				AA0000000000000000000106 /* Onboarding */,
+				AA0000000000000000000101 /* Plan */,
 				AA000000000000000000002F /* Theme.swift */,
 				AA0000000000000000000016 /* MainTabView.swift */,
 				AA0000000000000000000038 /* Overview */,
@@ -178,6 +187,22 @@
 				AA000000000000000000001E /* PlaidLinkSheet.swift */,
 			);
 			path = Plaid;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000101 /* Plan */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000102 /* PlanView.swift */,
+			);
+			path = Plan;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000106 /* Onboarding */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000107 /* OnboardingFlow.swift */,
+			);
+			path = Onboarding;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -255,6 +280,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AA0000000000000000000108 /* OnboardingFlow.swift in Sources */,
+				AA0000000000000000000105 /* Insights.swift in Sources */,
+				AA0000000000000000000103 /* PlanView.swift in Sources */,
 				AA0000000000000000000020 /* FolioFinanceApp.swift in Sources */,
 				AA0000000000000000000021 /* APIClient.swift in Sources */,
 				AA0000000000000000000022 /* Endpoints.swift in Sources */,
@@ -382,6 +410,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Folio uses Face ID to keep your financial data private.";
 				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -410,6 +439,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Folio uses Face ID to keep your financial data private.";
 				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;

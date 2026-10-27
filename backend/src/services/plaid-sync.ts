@@ -1,6 +1,6 @@
 import { eq, and, isNull } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { plaidItems, accounts, transactions, netWorthSnapshots } from "../db/schema.js";
+import { plaidItems, accounts, transactions, netWorthSnapshots, categories } from "../db/schema.js";
 import { plaid } from "./plaid-client.js";
 import { decryptToken } from "./encryption.js";
 import type { AccountBase, Transaction } from "plaid";
@@ -67,10 +67,9 @@ async function syncTransactions(
   let hasMore = true;
 
   while (hasMore) {
-    const { data } = await plaid.transactionsSync({
-      access_token: accessToken,
-      cursor,
-    });
+    const data = await syncPage(accessToken, cursor);
+    // Fresh items can stay PRODUCT_NOT_READY for a while; Plaid's webhook triggers another sync.
+    if (!data) return;
 
     await upsertTransactions(data.added, userId);
     await upsertTransactions(data.modified, userId);
@@ -86,6 +85,61 @@ async function syncTransactions(
     .where(eq(plaidItems.id, item.id));
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Initial transaction pulls can fail with PRODUCT_NOT_READY for a few seconds after linking.
+async function syncPage(accessToken: string, cursor: string | undefined) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const { data } = await plaid.transactionsSync({ access_token: accessToken, cursor });
+      return data;
+    } catch (err) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const code = (err as any)?.response?.data?.error_code;
+      if (code !== "PRODUCT_NOT_READY") throw err;
+      if (attempt >= 4) return null;
+      await sleep(2000 * (attempt + 1));
+    }
+  }
+}
+
+const CATEGORY_BY_PRIMARY: Record<string, string> = {
+  FOOD_AND_DRINK: "Dining",
+  TRANSPORTATION: "Transport",
+  TRAVEL: "Travel",
+  GENERAL_MERCHANDISE: "Shopping",
+  RENT_AND_UTILITIES: "Bills & Utilities",
+  HOME_IMPROVEMENT: "Home",
+  ENTERTAINMENT: "Entertainment",
+  MEDICAL: "Health",
+  PERSONAL_CARE: "Health",
+  INCOME: "Income",
+  TRANSFER_IN: "Transfer",
+  TRANSFER_OUT: "Transfer",
+  LOAN_PAYMENTS: "Transfer",
+  BANK_FEES: "Fees",
+  GENERAL_SERVICES: "Services",
+  GOVERNMENT_AND_NON_PROFIT: "Other",
+};
+
+function friendlyCategory(txn: Transaction): string {
+  const pfc = txn.personal_finance_category;
+  if (pfc?.detailed === "FOOD_AND_DRINK_GROCERIES") return "Groceries";
+  return (pfc && CATEGORY_BY_PRIMARY[pfc.primary]) || "Other";
+}
+
+const categoryIds = new Map<string, string>();
+async function categoryIdFor(name: string): Promise<string> {
+  const cached = categoryIds.get(name);
+  if (cached) return cached;
+  const [existing] = await db.select({ id: categories.id }).from(categories).where(eq(categories.name, name));
+  const id = existing
+    ? existing.id
+    : (await db.insert(categories).values({ name, isSystem: true }).returning({ id: categories.id }))[0].id;
+  categoryIds.set(name, id);
+  return id;
+}
+
 async function upsertTransactions(txns: Transaction[], userId: string): Promise<void> {
   for (const txn of txns) {
     const [acct] = await db
@@ -94,6 +148,8 @@ async function upsertTransactions(txns: Transaction[], userId: string): Promise<
       .where(and(eq(accounts.plaidAccountId, txn.account_id), eq(accounts.userId, userId)));
 
     if (!acct) continue;
+
+    const categoryId = await categoryIdFor(friendlyCategory(txn));
 
     await db
       .insert(transactions)
@@ -107,6 +163,7 @@ async function upsertTransactions(txns: Transaction[], userId: string): Promise<
         name: txn.name,
         merchantName: txn.merchant_name ?? null,
         isPending: txn.pending,
+        categoryId,
         lat: txn.location?.lat?.toString() ?? null,
         lon: txn.location?.lon?.toString() ?? null,
       })
@@ -117,6 +174,7 @@ async function upsertTransactions(txns: Transaction[], userId: string): Promise<
           name: txn.name,
           merchantName: txn.merchant_name ?? null,
           isPending: txn.pending,
+          categoryId,
           updatedAt: new Date(),
         },
       });

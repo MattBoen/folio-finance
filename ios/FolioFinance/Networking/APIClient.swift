@@ -7,7 +7,8 @@ actor APIClient {
 
     private let session: URLSession = {
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 30
+        config.timeoutIntervalForRequest = 90
+        config.waitsForConnectivity = true
         return URLSession(configuration: config)
     }()
 
@@ -17,6 +18,13 @@ actor APIClient {
         d.dateDecodingStrategy = .iso8601
         return d
     }()
+
+    /// Free hosting sleeps when idle; a throwaway request at launch wakes it before the user taps Sign in.
+    func warmUp() async {
+        var req = URLRequest(url: baseURL.appendingPathComponent("health"))
+        req.timeoutInterval = 90
+        _ = try? await session.data(for: req)
+    }
 
     func request<T: Decodable>(
         _ endpoint: Endpoint,
@@ -32,7 +40,13 @@ actor APIClient {
         }
         req.httpBody = endpoint.body
 
-        let (data, response) = try await session.data(for: req)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: req)
+        } catch let error as URLError where error.code != .cancelled {
+            throw APIError.network
+        }
 
         guard let http = response as? HTTPURLResponse else {
             throw APIError.invalidResponse
@@ -57,9 +71,11 @@ enum APIError: LocalizedError {
     case unauthorized
     case conflict
     case server(Int, String?)
+    case network
 
     var errorDescription: String? {
         switch self {
+        case .network: return "Couldn't reach Folio. Check your connection and try again."
         case .invalidResponse: return "Invalid server response."
         case .unauthorized: return "Session expired. Please log in again."
         case .conflict: return "That email is already registered."

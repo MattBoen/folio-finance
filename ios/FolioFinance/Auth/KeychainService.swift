@@ -42,3 +42,102 @@ final class KeychainService: Sendable {
         SecItemDelete(query as CFDictionary)
     }
 }
+
+// MARK: - Face ID app lock
+
+import LocalAuthentication
+import SwiftUI
+
+@MainActor
+final class AppLock: ObservableObject {
+    @Published private(set) var isLocked = false
+    @Published private(set) var isAuthenticating = false
+
+    private let enabledKey = "faceIDLockEnabled"
+    private var backgroundedAt: Date?
+    /// How long the app can sit in the background before it asks again.
+    private let grace: TimeInterval = 30
+
+    init() {
+        let enabled = UserDefaults.standard.object(forKey: "faceIDLockEnabled") as? Bool ?? true
+        let signedIn = KeychainService.shared.load(key: "access_token") != nil
+        isLocked = enabled && signedIn && LAContext().canEvaluatePolicy(.deviceOwnerAuthentication, error: nil)
+    }
+
+    var isEnabled: Bool {
+        get { UserDefaults.standard.object(forKey: enabledKey) as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: enabledKey); objectWillChange.send() }
+    }
+
+    var biometryName: String {
+        let ctx = LAContext()
+        _ = ctx.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil)
+        switch ctx.biometryType {
+        case .faceID: return "Face ID"
+        case .touchID: return "Touch ID"
+        case .opticID: return "Optic ID"
+        default: return "Passcode"
+        }
+    }
+
+    private var canAuthenticate: Bool {
+        LAContext().canEvaluatePolicy(.deviceOwnerAuthentication, error: nil)
+    }
+
+    func lockOnLaunch(authenticated: Bool) {
+        isLocked = authenticated && isEnabled && canAuthenticate
+    }
+
+    func didEnterBackground() { backgroundedAt = Date() }
+
+    func didBecomeActive(authenticated: Bool) {
+        defer { backgroundedAt = nil }
+        guard authenticated, isEnabled, canAuthenticate, let at = backgroundedAt else { return }
+        if Date().timeIntervalSince(at) > grace { isLocked = true }
+    }
+
+    func unlock() async {
+        guard isLocked, !isAuthenticating else { return }
+        isAuthenticating = true
+        let ctx = LAContext()
+        ctx.localizedCancelTitle = "Cancel"
+        do {
+            let ok = try await ctx.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "Unlock your finances")
+            if ok { isLocked = false }
+        } catch {
+            // stay locked; the user can tap to try again
+        }
+        isAuthenticating = false
+    }
+
+    func clear() { isLocked = false }
+}
+
+struct LockView: View {
+    @EnvironmentObject private var lock: AppLock
+    @EnvironmentObject private var auth: AuthManager
+
+    var body: some View {
+        ZStack {
+            Wash(tone: .balance)
+            VStack(spacing: 22) {
+                Spacer()
+                BrandMark(size: 84)
+                Text("Folio is locked").font(.title2.bold())
+                Button {
+                    Task { await lock.unlock() }
+                } label: {
+                    Label("Unlock with \(lock.biometryName)", systemImage: lock.biometryName == "Passcode" ? "lock.open.fill" : "faceid")
+                        .font(.headline).frame(height: 30).padding(.horizontal, 12)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                Spacer()
+                Button("Sign out", role: .destructive) { auth.logout(); lock.clear() }
+                    .font(.footnote)
+                    .padding(.bottom, 24)
+            }
+        }
+        .task { await lock.unlock() }
+    }
+}

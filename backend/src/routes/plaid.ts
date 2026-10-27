@@ -57,12 +57,14 @@ router.post("/link/token", requireAuth, async (c) => {
   const { userId } = c.get("auth");
   const { data } = await plaid.linkTokenCreate({
     user: { client_user_id: userId },
-    client_name: "Folio Finance",
+    client_name: "Folio",
     products: [Products.Transactions],
-    additional_consented_products: [Products.Liabilities],
+    // Best-effort extras: institutions that lack them still appear in Link.
+    optional_products: [Products.Investments, Products.Liabilities],
     country_codes: [CountryCode.Us],
     language: "en",
-    webhook: process.env.PLAID_WEBHOOK_URL,
+    ...(process.env.PLAID_WEBHOOK_URL ? { webhook: process.env.PLAID_WEBHOOK_URL } : {}),
+    ...(process.env.PLAID_REDIRECT_URI ? { redirect_uri: process.env.PLAID_REDIRECT_URI } : {}),
   });
   return c.json({ link_token: data.link_token, expiration: data.expiration });
 });
@@ -102,9 +104,15 @@ router.post(
       })
       .returning();
 
-    // Enqueue initial sync
-    if (boss) {
-      await boss.send("plaid-sync", { itemId: item.id, userId });
+    // Import accounts + transactions now so they exist when the app reloads.
+    // (The API runs without a job worker, so don't rely on the queue.)
+    let synced = true;
+    try {
+      await syncItem(item.id, userId);
+    } catch (err) {
+      synced = false;
+      console.error("[plaid] initial sync failed", err);
+      if (boss) await boss.send("plaid-sync", { itemId: item.id, userId });
     }
 
     return c.json({
@@ -112,6 +120,7 @@ router.post(
       institution_name: item.institutionName,
       status: item.status,
       created_at: item.createdAt,
+      synced,
     });
   }
 );
@@ -190,8 +199,13 @@ router.post("/webhook", async (c) => {
         .from(plaidItems)
         .where(eq(plaidItems.itemId, item_id));
 
-      if (item && boss) {
-        await boss.send("plaid-sync", { itemId: item.id, userId: item.userId });
+      if (item) {
+        if (boss) {
+          await boss.send("plaid-sync", { itemId: item.id, userId: item.userId });
+        } else {
+          // No worker on this deployment: sync in the background, reply to Plaid right away.
+          syncItem(item.id, item.userId).catch((err) => console.error("[plaid webhook] sync failed", err));
+        }
       }
     }
   }
