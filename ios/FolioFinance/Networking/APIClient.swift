@@ -3,11 +3,7 @@ import Foundation
 actor APIClient {
     static let shared = APIClient()
 
-    #if DEBUG
-    private let baseURL = URL(string: "http://192.168.25.72:3000")!
-    #else
-    private let baseURL = URL(string: "https://api.foliofinance.app")!
-    #endif
+    private let baseURL = URL(string: "https://folio-finance-api.onrender.com")!
 
     private let session: URLSession = {
         let config = URLSessionConfiguration.default
