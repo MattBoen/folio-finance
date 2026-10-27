@@ -41,7 +41,7 @@ struct PlanView: View {
                 .refreshable { await load() }
                 .overlay { if isLoading && !loaded { ProgressView().controlSize(.large) } }
             }
-            .navigationTitle("Plan")
+            .navigationTitle("Budget")
             .sheet(isPresented: $showIncome) {
                 IncomeSheet(current: insights?.income.monthly ?? 0, isManual: insights?.income.source == "manual") { Task { await load() } }
             }

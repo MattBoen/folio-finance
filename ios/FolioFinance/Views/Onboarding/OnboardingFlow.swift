@@ -372,7 +372,7 @@ private struct PlanStep: View {
     @ViewBuilder private func summary(_ i: Insights) -> some View {
         VStack(spacing: 14) {
             if i.dataQuality.transactionCount == 0 {
-                EmptyStateCard(symbol: "clock", title: "Not enough activity yet", message: "Once your accounts have a few weeks of transactions, Folio fills in your plan automatically. You'll find it in the Plan tab.")
+                EmptyStateCard(symbol: "clock", title: "Not enough activity yet", message: "Once your accounts have a few weeks of transactions, Folio fills in your plan automatically. You'll find it in the Budget tab.")
             } else {
                 Card {
                     VStack(alignment: .leading, spacing: 4) {
@@ -415,7 +415,7 @@ private struct PlanStep: View {
         async let fetched: Insights? = try? await auth.withFreshToken(.insights)
         for s in 1...stages.count { try? await Task.sleep(for: .milliseconds(650)); withAnimation { stage = s } }
         insights = await fetched
-        if insights == nil { error = "Couldn't build your plan right now. You can find it later in the Plan tab." ; finish() }
+        if insights == nil { error = "Couldn't build your plan right now. You can find it later in the Budget tab." ; finish() }
     }
 
     private func reload() async {

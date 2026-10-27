@@ -10,7 +10,7 @@ struct MainTabView: View {
                 .tabItem { Label("Spending", systemImage: "chart.pie.fill") }
 
             PlanView()
-                .tabItem { Label("Plan", systemImage: "checklist") }
+                .tabItem { Label("Budget", systemImage: "dollarsign.circle.fill") }
 
             TransactionsView()
                 .tabItem { Label("Activity", systemImage: "list.bullet.rectangle.fill") }
@@ -24,7 +24,7 @@ struct MainTabView: View {
 /// Shows setup the first time a signed-in user has no accounts.
 struct RootView: View {
     @EnvironmentObject private var auth: AuthManager
-    @AppStorage("onboardingDone") private var onboardingDone = false
+    @AppStorage("setupSeenV2") private var setupSeen = false
     @EnvironmentObject private var lock: AppLock
     @State private var showSetup = false
     @State private var askFaceID = false
@@ -33,7 +33,7 @@ struct RootView: View {
         MainTabView()
             .fullScreenCover(isPresented: $showSetup, onDismiss: { maybeAskFaceID() }) {
                 OnboardingFlow {
-                    onboardingDone = true
+                    setupSeen = true
                     showSetup = false
                 }
             }
@@ -48,12 +48,9 @@ struct RootView: View {
                 if ProcessInfo.processInfo.arguments.contains("-showOnboarding") { showSetup = true; return }
                 #endif
                 guard !auth.isDemo else { return }
-                if !onboardingDone {
-                    if let r: AccountsResponse = try? await auth.withFreshToken(.accounts), r.accounts.isEmpty {
-                        showSetup = true
-                        return
-                    }
-                    onboardingDone = true
+                if !setupSeen {
+                    showSetup = true
+                    return
                 }
                 maybeAskFaceID()
             }

@@ -193,9 +193,13 @@ struct ProfileMenu: View {
     @EnvironmentObject private var lock: AppLock
     @AppStorage("hideAmounts") private var hide = false
     @State private var confirmSignOut = false
+    @State private var showSetup = false
 
     var body: some View {
         Menu {
+            if !auth.isDemo {
+                Button { showSetup = true } label: { Label("Set up Folio", systemImage: "wand.and.stars") }
+            }
             Toggle(isOn: $hide) { Label("Hide amounts", systemImage: "eye.slash") }
             if !auth.isDemo {
                 Toggle(isOn: Binding(get: { lock.isEnabled }, set: { on in if on { Task { _ = await lock.enable() } } else { lock.isEnabled = false } })) {
@@ -211,6 +215,7 @@ struct ProfileMenu: View {
         } label: {
             Image(systemName: "person.crop.circle")
         }
+        .fullScreenCover(isPresented: $showSetup) { OnboardingFlow { showSetup = false } }
         .confirmationDialog(auth.isDemo ? "Exit the demo?" : "Sign out of Folio?", isPresented: $confirmSignOut, titleVisibility: .visible) {
             Button(auth.isDemo ? "Exit demo" : "Sign out", role: .destructive) { auth.logout() }
         }

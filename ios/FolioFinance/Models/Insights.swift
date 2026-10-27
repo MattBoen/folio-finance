@@ -1,6 +1,6 @@
 import Foundation
 
-/// Everything the Plan tab and setup flow show. All money values are plain dollars (Double); the server computes them.
+/// Everything the Budget tab and setup flow show. All money values are plain dollars (Double); the server computes them.
 struct Insights: Decodable, Sendable {
     let income: Income
     let outflow: Outflow

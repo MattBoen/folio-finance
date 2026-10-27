@@ -27,6 +27,12 @@ final class AuthManager: ObservableObject {
     }
 
     init() {
+        // The keychain survives deleting the app; UserDefaults doesn't. A fresh install starts signed out.
+        if !UserDefaults.standard.bool(forKey: "installMarkerV1") {
+            keychain.delete(key: "access_token")
+            keychain.delete(key: "refresh_token")
+            UserDefaults.standard.set(true, forKey: "installMarkerV1")
+        }
         isAuthenticated = accessToken != nil
     }
 
@@ -40,6 +46,7 @@ final class AuthManager: ObservableObject {
     }
 
     func register(email: String, password: String) async {
+        UserDefaults.standard.set(false, forKey: "setupSeenV2")
         await perform {
             let response: AuthResponse = try await self.api.request(
                 .register(email: email, password: password)
@@ -55,7 +62,7 @@ final class AuthManager: ObservableObject {
     }
 
     func logout() {
-        UserDefaults.standard.set(false, forKey: "onboardingDone")
+        UserDefaults.standard.set(false, forKey: "setupSeenV2")
         accessToken = nil
         refreshToken = nil
         isDemo = false
