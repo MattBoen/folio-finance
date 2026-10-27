@@ -9,12 +9,14 @@ struct FolioFinanceApp: App {
             Group {
                 if authManager.isAuthenticated {
                     MainTabView()
+                        .transition(.opacity)
                 } else {
                     LoginView()
+                        .transition(.opacity)
                 }
             }
+            .animation(.smooth, value: authManager.isAuthenticated)
             .environmentObject(authManager)
-            .preferredColorScheme(.light)
         }
     }
 }

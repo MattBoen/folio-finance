@@ -4,15 +4,17 @@ struct TransactionsView: View {
     @EnvironmentObject private var auth: AuthManager
     @State private var transactions: [Transaction] = []
     @State private var isLoading = false
+    @State private var loaded = false
     @State private var error: String?
     @State private var searchText = ""
+    @State private var showAdd = false
 
     private var filtered: [Transaction] {
         guard !searchText.isEmpty else { return transactions }
         let q = searchText.lowercased()
         return transactions.filter {
-            $0.displayName.lowercased().contains(q) ||
-            ($0.categoryName?.lowercased().contains(q) ?? false)
+            $0.displayName.lowercased().contains(q) || $0.category.lowercased().contains(q)
+                || ($0.accountName?.lowercased().contains(q) ?? false)
         }
     }
 
@@ -22,133 +24,230 @@ struct TransactionsView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if isLoading && transactions.isEmpty {
-                    ProgressView().tint(Color.folioAmber)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if transactions.isEmpty && error == nil {
-                    emptyState
+            ZStack {
+                Wash(tone: .activity)
+                if loaded && transactions.isEmpty && error == nil {
+                    ContentUnavailableView {
+                        Label("No activity yet", systemImage: "list.bullet.rectangle")
+                    } description: {
+                        Text("Add a purchase or paycheck to start tracking where your money goes.")
+                    } actions: {
+                        Button("Add transaction") { showAdd = true }.buttonStyle(.borderedProminent)
+                    }
                 } else {
                     List {
                         if let error {
                             ErrorBanner(message: error) { Task { await load() } }
-                                .listRowInsets(.init())
-                                .listRowBackground(Color.clear)
+                                .listRowBackground(Color.clear).listRowInsets(.init()).listRowSeparator(.hidden)
                         }
                         ForEach(grouped, id: \.key) { date, txns in
-                            Section(formatDate(date)) {
+                            Section {
                                 ForEach(txns) { txn in
                                     TransactionRow(transaction: txn)
+                                        .listRowBackground(Rectangle().fill(.regularMaterial))
                                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                            Button {
-                                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                            } label: {
-                                                Label("Exclude", systemImage: "eye.slash")
+                                            Button(role: .destructive) { Task { await delete(txn) } } label: {
+                                                Label("Delete", systemImage: "trash")
                                             }
-                                            .tint(Color.folioSlate)
+                                            Button { Task { await setExcluded(txn, !txn.isExcluded) } } label: {
+                                                Label(txn.isExcluded ? "Include" : "Exclude",
+                                                      systemImage: txn.isExcluded ? "eye" : "eye.slash")
+                                            }
+                                            .tint(.gray)
                                         }
                                 }
+                            } header: {
+                                Text(dayHeader(date))
                             }
                         }
                     }
-                    .listStyle(.insetGrouped)
+                    .scrollContentBackground(.hidden)
+                    .overlay { if isLoading && !loaded { ProgressView().controlSize(.large) } }
                 }
             }
-            .navigationTitle("Transactions")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationTitle("Activity")
             .searchable(text: $searchText, prompt: "Search transactions")
             .refreshable { await load() }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showAdd = true } label: { Image(systemName: "plus") }
+                }
+            }
+            .sheet(isPresented: $showAdd) { AddTransactionSheet { Task { await load() } } }
         }
         .task { await load() }
-    }
-
-    private var emptyState: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "creditcard")
-                .font(.system(size: 48))
-                .foregroundStyle(Color.folioAmber)
-            Text("No transactions yet")
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(Color.folioSlate)
-            Text("Connect an account to see your transactions here.")
-                .font(.subheadline)
-                .foregroundStyle(Color.folioSlate.opacity(0.6))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func load() async {
         isLoading = true
         error = nil
-        let cal = Calendar.current
         let to = Date()
-        let from = cal.date(byAdding: .month, value: -1, to: to)!
-        let fmt = ISO8601DateFormatter()
-        fmt.formatOptions = [.withFullDate]
+        let from = Calendar.current.date(byAdding: .day, value: -90, to: to) ?? to
         do {
-            let response: TransactionsResponse = try await auth.withFreshToken(
-                .transactions(from: fmt.string(from: from), to: fmt.string(from: to))
+            let r: TransactionsResponse = try await auth.withFreshToken(
+                .transactions(from: dayString(from), to: dayString(to), limit: 500)
             )
-            transactions = response.transactions
+            transactions = r.transactions
         } catch {
             self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
         isLoading = false
+        loaded = true
     }
 
-    private func formatDate(_ iso: String) -> String {
-        let parser = DateFormatter()
-        parser.dateFormat = "yyyy-MM-dd"
-        guard let d = parser.date(from: iso) else { return iso }
-        let fmt = DateFormatter()
-        fmt.dateStyle = .medium
-        return fmt.string(from: d)
+    private func setExcluded(_ t: Transaction, _ excluded: Bool) async {
+        do {
+            let _: AnyDecodable = try await auth.withFreshToken(.setTransactionExcluded(id: t.id, excluded: excluded))
+            await load()
+        } catch {
+            self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    private func delete(_ t: Transaction) async {
+        do {
+            let _: AnyDecodable = try await auth.withFreshToken(.deleteTransaction(id: t.id))
+            await load()
+        } catch {
+            self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
     }
 }
+
+// MARK: - Row
 
 struct TransactionRow: View {
     let transaction: Transaction
 
     var body: some View {
+        let style = Categories.style(transaction.category)
+        let amount = abs(transaction.doubleAmount)
         HStack(spacing: 12) {
-            Circle()
-                .fill(Color.secondary.opacity(0.12))
-                .frame(width: 40, height: 40)
-                .overlay(
-                    Image(systemName: transaction.isDebit ? "arrow.up" : "arrow.down")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(transaction.isDebit ? Color.primary : .green)
-                )
-
+            IconBadge(symbol: style.symbol, color: style.color, size: 38)
             VStack(alignment: .leading, spacing: 2) {
-                Text(transaction.displayName)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundStyle(Color.primary)
-                    .lineLimit(1)
-                if let cat = transaction.categoryName {
-                    Text(cat)
-                        .font(.caption)
-                        .foregroundStyle(Color.secondary)
+                Text(transaction.displayName).font(.body).lineLimit(1)
+                HStack(spacing: 6) {
+                    Text([transaction.category, transaction.accountName].compactMap { $0 }.joined(separator: " · "))
+                        .lineLimit(1)
+                    if transaction.isPending { Text("Pending").foregroundStyle(.orange) }
+                    if transaction.isExcluded { Text("Excluded").foregroundStyle(.orange) }
                 }
+                .font(.caption).foregroundStyle(.secondary)
             }
-
-            Spacer()
-
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(transaction.displayAmount)
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(transaction.isDebit ? Color.primary : .green)
-                if transaction.isPending {
-                    Text("Pending")
-                        .font(.caption2)
-                        .foregroundStyle(Color.folioAmber)
-                }
-            }
+            Spacer(minLength: 8)
+            Text((transaction.isDebit ? "−" : "+") + money(amount, cents: true))
+                .font(.body.weight(.semibold)).monospacedDigit()
+                .foregroundStyle(transaction.isDebit ? Color.primary : Color.up)
+                .sensitive()
         }
+        .opacity(transaction.isExcluded ? 0.5 : 1)
         .padding(.vertical, 2)
+    }
+}
+
+// MARK: - Add transaction
+
+struct AddTransactionSheet: View {
+    var onSaved: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var auth: AuthManager
+
+    @State private var accounts: [Account] = []
+    @State private var accountId = ""
+    @State private var isIncome = false
+    @State private var amountText = ""
+    @State private var name = ""
+    @State private var category = "Groceries"
+    @State private var date = Date()
+    @State private var saving = false
+    @State private var loadedAccounts = false
+    @State private var error: String?
+
+    private var amount: Double? { Double(amountText.replacingOccurrences(of: ",", with: "")) }
+    private var canSave: Bool {
+        (amount ?? 0) > 0 && !name.trimmingCharacters(in: .whitespaces).isEmpty && !accountId.isEmpty && !saving
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Picker("Type", selection: $isIncome) {
+                        Text("Expense").tag(false)
+                        Text("Income").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(.init())
+                }
+                Section {
+                    HStack {
+                        Text("$").foregroundStyle(.secondary)
+                        TextField("0.00", text: $amountText).keyboardType(.decimalPad)
+                    }
+                    TextField(isIncome ? "Source (e.g. Paycheck)" : "Merchant (e.g. Trader Joe's)", text: $name)
+                    if !isIncome {
+                        Picker("Category", selection: $category) {
+                            ForEach(Categories.choices.filter { $0 != "Income" }, id: \.self) { c in
+                                Label(c, systemImage: Categories.style(c).symbol).tag(c)
+                            }
+                        }
+                    }
+                    DatePicker("Date", selection: $date, in: ...Date(), displayedComponents: .date)
+                }
+                Section {
+                    if accounts.isEmpty && loadedAccounts {
+                        Text("Add an account first from the Accounts tab.").foregroundStyle(.secondary)
+                    } else {
+                        Picker("Account", selection: $accountId) {
+                            ForEach(accounts) { Text($0.name).tag($0.id) }
+                        }
+                    }
+                } footer: {
+                    Text("Manual accounts update their balance automatically.")
+                }
+                if let error { Section { Text(error).foregroundStyle(.red).font(.footnote) } }
+            }
+            .navigationTitle("New Transaction")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button { Task { await save() } } label: {
+                        if saving { ProgressView() } else { Text("Save").bold() }
+                    }
+                    .disabled(!canSave)
+                }
+            }
+            .task { await loadAccounts() }
+        }
+        .presentationDetents([.large])
+    }
+
+    private func loadAccounts() async {
+        if let r: AccountsResponse = try? await auth.withFreshToken(.accounts) {
+            accounts = r.accounts.filter { !$0.isHidden }
+            if accountId.isEmpty { accountId = accounts.first?.id ?? "" }
+        }
+        loadedAccounts = true
+    }
+
+    private func save() async {
+        guard let amount else { return }
+        saving = true
+        error = nil
+        do {
+            let _: AnyDecodable = try await auth.withFreshToken(.createTransaction(
+                accountId: accountId, amount: amount, kind: isIncome ? "income" : "expense",
+                date: dayString(date), name: name.trimmingCharacters(in: .whitespaces),
+                category: isIncome ? "Income" : category
+            ))
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            onSaved()
+            dismiss()
+        } catch {
+            self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+        saving = false
     }
 }

@@ -1,12 +1,79 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { eq, and, isNull, gte, lte, desc, sql } from "drizzle-orm";
+import { eq, and, isNull, gte, lte, desc, sql, ilike } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { db } from "../db/client.js";
 import { transactions, accounts, categories } from "../db/schema.js";
 import { requireAuth } from "../middleware/auth.js";
+import { takeNetWorthSnapshot } from "../services/plaid-sync.js";
 
 const router = new Hono();
+
+const userCat = alias(categories, "user_cat");
+const plaidCat = alias(categories, "plaid_cat");
+const categoryNameExpr = sql<string | null>`coalesce(${userCat.name}, ${plaidCat.name})`;
+
+const txSelect = {
+  id: transactions.id,
+  accountId: transactions.accountId,
+  accountName: accounts.name,
+  amount: transactions.amount,
+  date: transactions.date,
+  name: transactions.name,
+  userName: transactions.userName,
+  merchantName: transactions.merchantName,
+  categoryName: categoryNameExpr,
+  note: transactions.note,
+  isPending: transactions.isPending,
+  isExcluded: transactions.isExcluded,
+  lat: transactions.lat,
+  lon: transactions.lon,
+};
+
+function fromTx(q: any) {
+  return q
+    .from(transactions)
+    .leftJoin(accounts, eq(transactions.accountId, accounts.id))
+    .leftJoin(userCat, eq(transactions.userCategoryId, userCat.id))
+    .leftJoin(plaidCat, eq(transactions.categoryId, plaidCat.id));
+}
+
+async function loadTransaction(userId: string, id: string) {
+  const [row] = await fromTx(db.select(txSelect)).where(
+    and(eq(transactions.id, id), eq(transactions.userId, userId), isNull(transactions.deletedAt))
+  );
+  return row;
+}
+
+async function findOrCreateCategory(name: string): Promise<string> {
+  const [existing] = await db
+    .select({ id: categories.id })
+    .from(categories)
+    .where(ilike(categories.name, name))
+    .limit(1);
+  if (existing) return existing.id;
+  const [created] = await db
+    .insert(categories)
+    .values({ name, isSystem: true })
+    .returning({ id: categories.id });
+  return created.id;
+}
+
+// Effect of a signed (Plaid-style) amount on a manual account's balance.
+function balanceDelta(type: string, signedAmount: number): number {
+  return type === "credit" || type === "loan" ? signedAmount : -signedAmount;
+}
+
+async function adjustManualBalance(accountId: string, userId: string, delta: number) {
+  await db
+    .update(accounts)
+    .set({
+      balanceCurrent: sql`(coalesce(${accounts.balanceCurrent}, 0) + ${delta.toFixed(2)}::numeric)`,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(accounts.id, accountId), eq(accounts.userId, userId)));
+}
 
 // ── List transactions ─────────────────────────────────────────────────────────
 router.get(
@@ -38,26 +105,7 @@ router.get(
     if (pending === "true") conditions.push(eq(transactions.isPending, true));
     if (pending === "false") conditions.push(eq(transactions.isPending, false));
 
-    const rows = await db
-      .select({
-        id: transactions.id,
-        accountId: transactions.accountId,
-        accountName: accounts.name,
-        amount: transactions.amount,
-        date: transactions.date,
-        name: transactions.name,
-        userName: transactions.userName,
-        merchantName: transactions.merchantName,
-        categoryName: categories.name,
-        note: transactions.note,
-        isPending: transactions.isPending,
-        isExcluded: transactions.isExcluded,
-        lat: transactions.lat,
-        lon: transactions.lon,
-      })
-      .from(transactions)
-      .leftJoin(accounts, eq(transactions.accountId, accounts.id))
-      .leftJoin(categories, eq(transactions.userCategoryId, categories.id))
+    const rows = await fromTx(db.select(txSelect))
       .where(and(...conditions))
       .orderBy(desc(transactions.date))
       .limit(limit)
@@ -83,6 +131,7 @@ router.patch(
       note: z.string().max(500).optional(),
       user_category_id: z.string().uuid().nullable().optional(),
       is_excluded: z.boolean().optional(),
+      category: z.string().min(1).max(60).optional(),
     })
   ),
   async (c) => {
@@ -95,17 +144,105 @@ router.patch(
     if (patch.note !== undefined) set.note = patch.note;
     if (patch.user_category_id !== undefined) set.userCategoryId = patch.user_category_id;
     if (patch.is_excluded !== undefined) set.isExcluded = patch.is_excluded;
+    if (patch.category !== undefined) set.userCategoryId = await findOrCreateCategory(patch.category.trim());
 
     const [updated] = await db
       .update(transactions)
       .set(set)
-      .where(and(eq(transactions.id, txnId), eq(transactions.userId, userId)))
+      .where(
+        and(eq(transactions.id, txnId), eq(transactions.userId, userId), isNull(transactions.deletedAt))
+      )
       .returning({ id: transactions.id });
 
     if (!updated) return c.json({ error: "Not found" }, 404);
-    return c.json({ ok: true });
+    return c.json({ ok: true, transaction: await loadTransaction(userId, txnId) });
   }
 );
+
+// ── Create manual transaction ────────────────────────────────────────────────
+router.post(
+  "/",
+  requireAuth,
+  zValidator(
+    "json",
+    z.object({
+      account_id: z.string().uuid(),
+      amount: z.number().positive(),
+      kind: z.enum(["expense", "income"]),
+      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      name: z.string().min(1).max(100),
+      category: z.string().min(1).max(60).optional(),
+      note: z.string().max(500).optional(),
+    })
+  ),
+  async (c) => {
+    const { userId } = c.get("auth");
+    const body = c.req.valid("json");
+
+    const [acct] = await db
+      .select({ id: accounts.id, type: accounts.type, plaidItemId: accounts.plaidItemId })
+      .from(accounts)
+      .where(
+        and(eq(accounts.id, body.account_id), eq(accounts.userId, userId), isNull(accounts.deletedAt))
+      );
+    if (!acct) return c.json({ error: "Account not found" }, 404);
+
+    const signed = body.kind === "expense" ? body.amount : -body.amount;
+    const categoryId = body.category ? await findOrCreateCategory(body.category.trim()) : null;
+
+    const [created] = await db
+      .insert(transactions)
+      .values({
+        userId,
+        accountId: acct.id,
+        amount: signed.toFixed(2),
+        date: body.date,
+        name: body.name,
+        userCategoryId: categoryId,
+        note: body.note ?? null,
+      })
+      .returning({ id: transactions.id });
+
+    if (!acct.plaidItemId) {
+      await adjustManualBalance(acct.id, userId, balanceDelta(acct.type, signed));
+      await takeNetWorthSnapshot(userId);
+    }
+
+    return c.json({ transaction: await loadTransaction(userId, created.id) }, 201);
+  }
+);
+
+// ── Delete manual transaction ────────────────────────────────────────────────
+router.delete("/:id", requireAuth, async (c) => {
+  const { userId } = c.get("auth");
+  const id = c.req.param("id");
+
+  const [tx] = await db
+    .select({
+      accountId: transactions.accountId,
+      amount: transactions.amount,
+      plaidTransactionId: transactions.plaidTransactionId,
+      accountType: accounts.type,
+      plaidItemId: accounts.plaidItemId,
+    })
+    .from(transactions)
+    .innerJoin(accounts, eq(transactions.accountId, accounts.id))
+    .where(and(eq(transactions.id, id), eq(transactions.userId, userId), isNull(transactions.deletedAt)));
+
+  if (!tx) return c.json({ error: "Not found" }, 404);
+  if (tx.plaidTransactionId) return c.json({ error: "Synced transactions can't be deleted" }, 400);
+
+  await db
+    .update(transactions)
+    .set({ deletedAt: new Date(), updatedAt: new Date() })
+    .where(and(eq(transactions.id, id), eq(transactions.userId, userId)));
+
+  if (!tx.plaidItemId) {
+    await adjustManualBalance(tx.accountId, userId, -balanceDelta(tx.accountType, parseFloat(tx.amount)));
+    await takeNetWorthSnapshot(userId);
+  }
+  return c.json({ ok: true });
+});
 
 // ── Spending summary (for Spending tab) ───────────────────────────────────────
 router.get(
@@ -124,24 +261,25 @@ router.get(
 
     const rows = await db
       .select({
-        categoryName: categories.name,
-        categoryId: transactions.userCategoryId,
+        categoryName: categoryNameExpr,
         total: sql<string>`sum(${transactions.amount})::text`,
         count: sql<number>`count(*)::int`,
       })
       .from(transactions)
-      .leftJoin(categories, eq(transactions.userCategoryId, categories.id))
+      .leftJoin(userCat, eq(transactions.userCategoryId, userCat.id))
+      .leftJoin(plaidCat, eq(transactions.categoryId, plaidCat.id))
       .where(
         and(
           eq(transactions.userId, userId),
           isNull(transactions.deletedAt),
           eq(transactions.isExcluded, false),
           eq(transactions.isPending, false),
+          sql`${transactions.amount} > 0`,
           gte(transactions.date, from),
           lte(transactions.date, to)
         )
       )
-      .groupBy(transactions.userCategoryId, categories.name)
+      .groupBy(categoryNameExpr)
       .orderBy(desc(sql`sum(${transactions.amount})`));
 
     return c.json({ summary: rows });

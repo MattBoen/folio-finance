@@ -1,4 +1,4 @@
-import { eq, and } from "drizzle-orm";
+import { eq, and, isNull } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { plaidItems, accounts, transactions, netWorthSnapshots } from "../db/schema.js";
 import { plaid } from "./plaid-client.js";
@@ -132,14 +132,20 @@ async function removeTransactions(plaidTxnIds: string[]): Promise<void> {
   }
 }
 
-async function takeNetWorthSnapshot(userId: string): Promise<void> {
+export async function takeNetWorthSnapshot(userId: string): Promise<void> {
   const userAccounts = await db
     .select({
       type: accounts.type,
       balanceCurrent: accounts.balanceCurrent,
     })
     .from(accounts)
-    .where(and(eq(accounts.userId, userId)));
+    .where(
+      and(
+        eq(accounts.userId, userId),
+        eq(accounts.isHidden, false),
+        isNull(accounts.deletedAt)
+      )
+    );
 
   let totalAssets = 0;
   let totalLiabilities = 0;

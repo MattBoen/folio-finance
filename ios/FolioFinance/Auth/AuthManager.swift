@@ -5,6 +5,7 @@ final class AuthManager: ObservableObject {
     @Published private(set) var isAuthenticated = false
     @Published private(set) var isLoading = false
     @Published private(set) var error: String?
+    @Published private(set) var isDemo = false
 
     private let keychain = KeychainService.shared
     private let api = APIClient.shared
@@ -56,7 +57,14 @@ final class AuthManager: ObservableObject {
     func logout() {
         accessToken = nil
         refreshToken = nil
+        isDemo = false
         isAuthenticated = false
+        error = nil
+    }
+
+    func startDemo() {
+        isDemo = true
+        isAuthenticated = true
         error = nil
     }
 
@@ -64,6 +72,7 @@ final class AuthManager: ObservableObject {
 
     /// Makes an authenticated API request. On 401, refreshes the access token once and retries.
     func withFreshToken<T: Decodable & Sendable>(_ endpoint: Endpoint) async throws -> T {
+        if isDemo { return try DemoData.respond(to: endpoint) }
         guard let token = accessToken else { throw APIError.unauthorized }
         do {
             return try await api.request(endpoint, token: token)
@@ -98,4 +107,120 @@ final class AuthManager: ObservableObject {
 struct AuthResponse: Decodable, Sendable {
     let accessToken: String
     let refreshToken: String
+}
+
+// MARK: - Demo mode (sample data, read-only)
+
+@MainActor
+enum DemoData {
+    static func respond<T: Decodable>(to endpoint: Endpoint) throws -> T {
+        guard endpoint.method == "GET" else {
+            throw APIError.server(403, "Demo mode is read-only. Create a free account to save your own data.")
+        }
+        let path = endpoint.path
+        let object: Any
+        if path.hasPrefix("/accounts/net-worth/history") {
+            object = ["snapshots": history(days: Int(query(path)["days"] ?? "") ?? 90)]
+        } else if path == "/accounts" {
+            object = ["accounts": accounts]
+        } else if path.hasPrefix("/transactions") {
+            let q = query(path)
+            var rows = transactions
+            if let from = q["from"] { rows = rows.filter { ($0["date"] as? String ?? "") >= from } }
+            if let to = q["to"] { rows = rows.filter { ($0["date"] as? String ?? "") <= to } }
+            if let acct = q["account_id"] { rows = rows.filter { ($0["account_id"] as? String) == acct } }
+            object = ["transactions": rows, "total": rows.count]
+        } else {
+            throw APIError.invalidResponse
+        }
+        let data = try JSONSerialization.data(withJSONObject: object)
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        return try decoder.decode(T.self, from: data)
+    }
+
+    private static func query(_ path: String) -> [String: String] {
+        guard let items = URLComponents(string: "https://demo.local" + path)?.queryItems else { return [:] }
+        return Dictionary(items.compactMap { i in i.value.map { (i.name, $0) } }, uniquingKeysWith: { a, _ in a })
+    }
+
+    private static func acct(_ id: String, _ name: String, _ type: String, _ subtype: String?, _ bal: Double, _ inst: String) -> [String: Any] {
+        var a: [String: Any] = [
+            "id": id, "name": name, "type": type, "balance_current": String(format: "%.2f", bal),
+            "currency": "USD", "is_hidden": false, "institution_name": inst,
+        ]
+        if let subtype { a["subtype"] = subtype }
+        return a
+    }
+
+    private static let accounts: [[String: Any]] = [
+        acct("demo-checking", "Everyday Checking", "depository", "checking", 4820.44, "Harbor Bank"),
+        acct("demo-savings", "High-Yield Savings", "depository", "savings", 18500, "Harbor Bank"),
+        acct("demo-brokerage", "Brokerage", "investment", nil, 42310.20, "Summit Invest"),
+        acct("demo-401k", "401(k)", "investment", nil, 61480.75, "Summit Invest"),
+        acct("demo-car", "Vehicle", "other", nil, 14500, "Estimated value"),
+        acct("demo-card", "Rewards Card", "credit", nil, 1284.10, "Harbor Bank"),
+        acct("demo-loan", "Auto Loan", "loan", "auto", 11200, "Lakeside Credit Union"),
+    ]
+
+    private static func history(days: Int) -> [[String: Any]] {
+        let now = Date()
+        return (0..<days).map { i in
+            let date = Calendar.current.date(byAdding: .day, value: -i, to: now) ?? now
+            let growth = 0.90 + 0.10 * (1 - Double(i) / 365)
+            let nw = 129_127.29 * growth + sin(Double(i) * 0.09) * 380 + sin(Double(i) * 0.61) * 140
+            let liabilities = 12_484.10 + Double(i) * 8
+            return [
+                "date": dayString(date),
+                "net_worth": String(format: "%.2f", nw),
+                "total_assets": String(format: "%.2f", nw + liabilities),
+                "total_liabilities": String(format: "%.2f", liabilities),
+            ]
+        }
+    }
+
+    private struct Template {
+        let name: String, category: String, low: Double, high: Double, every: Int, offset: Int, account: String
+        var income = false
+    }
+
+    private static let templates: [Template] = [
+        .init(name: "Whole Foods", category: "Groceries", low: 45, high: 120, every: 4, offset: 0, account: "demo-card"),
+        .init(name: "Trader Joe's", category: "Groceries", low: 30, high: 80, every: 6, offset: 2, account: "demo-card"),
+        .init(name: "Blue Bottle Coffee", category: "Dining", low: 5, high: 9, every: 2, offset: 1, account: "demo-card"),
+        .init(name: "Chipotle", category: "Dining", low: 12, high: 18, every: 5, offset: 3, account: "demo-card"),
+        .init(name: "Shell", category: "Transport", low: 35, high: 62, every: 9, offset: 4, account: "demo-checking"),
+        .init(name: "Uber", category: "Transport", low: 12, high: 31, every: 7, offset: 5, account: "demo-card"),
+        .init(name: "Amazon", category: "Shopping", low: 20, high: 150, every: 8, offset: 6, account: "demo-card"),
+        .init(name: "AMC Theatres", category: "Entertainment", low: 14, high: 40, every: 13, offset: 7, account: "demo-card"),
+        .init(name: "CVS Pharmacy", category: "Health", low: 10, high: 40, every: 17, offset: 8, account: "demo-checking"),
+        .init(name: "Netflix", category: "Subscriptions", low: 15.49, high: 15.49, every: 30, offset: 3, account: "demo-card"),
+        .init(name: "Spotify", category: "Subscriptions", low: 11.99, high: 11.99, every: 30, offset: 7, account: "demo-card"),
+        .init(name: "Comcast", category: "Bills & Utilities", low: 79.99, high: 79.99, every: 30, offset: 12, account: "demo-checking"),
+        .init(name: "City Utilities", category: "Bills & Utilities", low: 112.40, high: 112.40, every: 30, offset: 15, account: "demo-checking"),
+        .init(name: "Rent", category: "Home", low: 1850, high: 1850, every: 30, offset: 1, account: "demo-checking"),
+        .init(name: "Planet Fitness", category: "Health", low: 24.99, high: 24.99, every: 30, offset: 20, account: "demo-checking"),
+        .init(name: "Acme Corp Payroll", category: "Income", low: 3150, high: 3150, every: 14, offset: 2, account: "demo-checking", income: true),
+    ]
+
+    private static let accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0["id"] as! String, $0["name"] as! String) })
+
+    private static let transactions: [[String: Any]] = {
+        let now = Date()
+        var rows: [[String: Any]] = []
+        for i in 0..<120 {
+            let date = Calendar.current.date(byAdding: .day, value: -i, to: now) ?? now
+            for (k, t) in templates.enumerated() where i % t.every == t.offset {
+                let r = Double((i * 31 + k * 17) % 100) / 100
+                let amount = t.low + (t.high - t.low) * r
+                rows.append([
+                    "id": "demo-\(i)-\(k)", "account_id": t.account, "account_name": accountNames[t.account] ?? "",
+                    "amount": String(format: "%.2f", t.income ? -amount : amount), "date": dayString(date),
+                    "name": t.name, "merchant_name": t.name, "category_name": t.category,
+                    "is_pending": i == 0 && k % 2 == 0, "is_excluded": false,
+                ])
+            }
+        }
+        return rows
+    }()
 }

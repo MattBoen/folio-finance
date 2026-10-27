@@ -27,6 +27,10 @@ struct Transaction: Identifiable, Codable, Sendable {
 
     var isDebit: Bool { decimalAmount > 0 }
 
+    var doubleAmount: Double { NSDecimalNumber(decimal: decimalAmount).doubleValue }
+
+    var category: String { categoryName ?? (isDebit ? "Other" : "Income") }
+
     var displayName: String { userName ?? merchantName ?? name }
 
     var displayDate: String {

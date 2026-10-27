@@ -168,3 +168,46 @@ describe("API isolation: auth", () => {
     expect(body.userId).not.toBe(userA.id);
   });
 });
+
+describe("API isolation: manual accounts and transactions", () => {
+  const auth = (u: TestUser) => ({ Authorization: `Bearer ${u.accessToken}` });
+  const base = "http://localhost";
+
+  async function call(u: TestUser, method: string, path: string, body?: unknown) {
+    return app.request(base + path, {
+      method,
+      headers: { ...auth(u), "Content-Type": "application/json" },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  }
+
+  it("user B cannot patch or delete user A's account", async () => {
+    expect((await call(userB, "PATCH", `/accounts/${userA_accountId}`, { balance: 1 })).status).toBe(404);
+    expect((await call(userB, "DELETE", `/accounts/${userA_accountId}`)).status).toBe(404);
+  });
+
+  it("user B cannot add a transaction to user A's account", async () => {
+    const res = await call(userB, "POST", "/transactions", {
+      account_id: userA_accountId,
+      amount: 5,
+      kind: "expense",
+      date: "2025-01-02",
+      name: "Sneaky",
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("user B cannot patch or delete user A's transaction", async () => {
+    expect((await call(userB, "PATCH", `/transactions/${userA_transactionId}`, { is_excluded: true })).status).toBe(404);
+    expect((await call(userB, "DELETE", `/transactions/${userA_transactionId}`)).status).toBe(404);
+  });
+
+  it("manual account lifecycle stays scoped to its owner", async () => {
+    const created = await call(userA, "POST", "/accounts/manual", { name: "Cash", type: "depository", balance: 100 });
+    expect(created.status).toBe(201);
+    const { account } = (await created.json()) as any;
+    const listB = (await (await call(userB, "GET", "/accounts")).json()) as any;
+    expect(listB.accounts.map((a: any) => a.id)).not.toContain(account.id);
+    expect((await call(userA, "DELETE", `/accounts/${account.id}`)).status).toBe(200);
+  });
+});

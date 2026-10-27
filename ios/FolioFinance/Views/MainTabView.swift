@@ -1,41 +1,19 @@
 import SwiftUI
 
 struct MainTabView: View {
-    @State private var selectedTab = 0
-
-    init() {
-        // Native opaque tab bar — matches Wallet, Health, Stocks style
-        let tabBar = UITabBarAppearance()
-        tabBar.configureWithOpaqueBackground()
-        tabBar.backgroundColor = UIColor.systemBackground
-        UITabBar.appearance().standardAppearance = tabBar
-        UITabBar.appearance().scrollEdgeAppearance = tabBar
-
-        // Large-title nav bar with cream tint for non-slate screens
-        let navBar = UINavigationBarAppearance()
-        navBar.configureWithDefaultBackground()
-        UINavigationBar.appearance().standardAppearance = navBar
-        UINavigationBar.appearance().scrollEdgeAppearance = navBar
-    }
-
     var body: some View {
-        TabView(selection: $selectedTab) {
+        TabView {
             OverviewView()
-                .tabItem { Label("Overview", systemImage: "house.fill") }
-                .tag(0)
+                .tabItem { Label("Overview", systemImage: "square.grid.2x2.fill") }
 
-            AccountsView()
-                .tabItem { Label("Accounts", systemImage: "creditcard.fill") }
-                .tag(1)
+            SpendingView()
+                .tabItem { Label("Spending", systemImage: "chart.pie.fill") }
 
             TransactionsView()
-                .tabItem { Label("Transactions", systemImage: "list.bullet.rectangle.fill") }
-                .tag(2)
+                .tabItem { Label("Activity", systemImage: "list.bullet.rectangle.fill") }
 
-            BudgetView()
-                .tabItem { Label("Budget", systemImage: "chart.bar.xaxis") }
-                .tag(3)
+            AccountsView()
+                .tabItem { Label("Accounts", systemImage: "building.columns.fill") }
         }
-        .tint(Color.folioAmber)
     }
 }

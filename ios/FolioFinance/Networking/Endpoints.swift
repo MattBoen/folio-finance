@@ -93,6 +93,30 @@ extension Endpoint {
 
 extension Endpoint {
     static var accounts: Endpoint { .get("/accounts") }
+
+    static func createManualAccount(
+        name: String, type: String, subtype: String?, balance: Double, institutionName: String?
+    ) -> Endpoint {
+        struct Body: Encodable {
+            let name: String; let type: String; let subtype: String?
+            let balance: Double; let institutionName: String?
+        }
+        return .post("/accounts/manual", body: Body(
+            name: name, type: type, subtype: subtype, balance: balance, institutionName: institutionName
+        ))
+    }
+
+    static func updateAccount(id: String, name: String, balance: Double, institutionName: String?) -> Endpoint {
+        struct Body: Encodable { let name: String; let balance: Double; let institutionName: String? }
+        return .patch("/accounts/\(id)", body: Body(name: name, balance: balance, institutionName: institutionName))
+    }
+
+    static func deleteAccount(id: String) -> Endpoint { .delete("/accounts/\(id)") }
+
+    static func setAccountHidden(id: String, hidden: Bool) -> Endpoint {
+        struct Body: Encodable { let hidden: Bool }
+        return .patch("/accounts/\(id)/hidden", body: Body(hidden: hidden))
+    }
 }
 
 // ── Transactions ──────────────────────────────────────────────────────────────
@@ -103,6 +127,25 @@ extension Endpoint {
         if let accountId { path += "&account_id=\(accountId)" }
         return .get(path)
     }
+
+    static func createTransaction(
+        accountId: String, amount: Double, kind: String, date: String, name: String, category: String?
+    ) -> Endpoint {
+        struct Body: Encodable {
+            let accountId: String; let amount: Double; let kind: String
+            let date: String; let name: String; let category: String?
+        }
+        return .post("/transactions", body: Body(
+            accountId: accountId, amount: amount, kind: kind, date: date, name: name, category: category
+        ))
+    }
+
+    static func setTransactionExcluded(id: String, excluded: Bool) -> Endpoint {
+        struct Body: Encodable { let isExcluded: Bool }
+        return .patch("/transactions/\(id)", body: Body(isExcluded: excluded))
+    }
+
+    static func deleteTransaction(id: String) -> Endpoint { .delete("/transactions/\(id)") }
 
     static func spendingSummary(from: String, to: String) -> Endpoint {
         .get("/transactions/spending/summary?from=\(from)&to=\(to)")
