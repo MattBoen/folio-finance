@@ -59,13 +59,13 @@ final class AppLock: ObservableObject {
     private let grace: TimeInterval = 30
 
     init() {
-        let enabled = UserDefaults.standard.object(forKey: "faceIDLockEnabled") as? Bool ?? true
+        let enabled = UserDefaults.standard.bool(forKey: "faceIDLockEnabled")
         let signedIn = KeychainService.shared.load(key: "access_token") != nil
         isLocked = enabled && signedIn && LAContext().canEvaluatePolicy(.deviceOwnerAuthentication, error: nil)
     }
 
     var isEnabled: Bool {
-        get { UserDefaults.standard.object(forKey: enabledKey) as? Bool ?? true }
+        get { UserDefaults.standard.bool(forKey: enabledKey) }
         set { UserDefaults.standard.set(newValue, forKey: enabledKey); objectWillChange.send() }
     }
 
@@ -78,6 +78,24 @@ final class AppLock: ObservableObject {
         case .opticID: return "Optic ID"
         default: return "Passcode"
         }
+    }
+
+    /// True when this device has Face ID / Touch ID / a passcode that can unlock the app.
+    var isAvailable: Bool { canAuthenticate }
+
+    var hasAsked: Bool {
+        get { UserDefaults.standard.bool(forKey: "faceIDAsked") }
+        set { UserDefaults.standard.set(newValue, forKey: "faceIDAsked") }
+    }
+
+    /// Turns the lock on after the user proves it works (this also triggers the system permission prompt).
+    func enable() async -> Bool {
+        let ctx = LAContext()
+        do {
+            let ok = try await ctx.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "Turn on \(biometryName) for Folio")
+            if ok { isEnabled = true }
+            return ok
+        } catch { return false }
     }
 
     private var canAuthenticate: Bool {

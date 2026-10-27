@@ -198,7 +198,7 @@ struct ProfileMenu: View {
         Menu {
             Toggle(isOn: $hide) { Label("Hide amounts", systemImage: "eye.slash") }
             if !auth.isDemo {
-                Toggle(isOn: Binding(get: { lock.isEnabled }, set: { lock.isEnabled = $0 })) {
+                Toggle(isOn: Binding(get: { lock.isEnabled }, set: { on in if on { Task { _ = await lock.enable() } } else { lock.isEnabled = false } })) {
                     Label("Require \(lock.biometryName)", systemImage: "faceid")
                 }
             }

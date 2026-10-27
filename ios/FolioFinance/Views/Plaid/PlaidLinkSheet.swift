@@ -32,7 +32,12 @@ final class PlaidLinker: ObservableObject {
         phase = .preparing
         do {
             let r: LinkTokenResponse = try await auth.withFreshToken(.linkToken)
-            phase = .readyToPresent(token: r.linkToken)
+            let token = r.linkToken.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard token.hasPrefix("link-") else {
+                phase = .failed("The server didn't return a valid Plaid link token (got \(token.isEmpty ? "nothing" : "an unexpected value")). Check the Plaid keys on the server.")
+                return
+            }
+            phase = .readyToPresent(token: token)
         } catch {
             phase = .failed(Self.message(error))
         }
@@ -65,8 +70,12 @@ struct PlaidLinkSheet: View {
     @SwiftUI.Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var auth: AuthManager
     @StateObject private var linker = PlaidLinker()
-    @State private var presenting = false
-    @State private var token = ""
+    @State private var session: LinkSession?
+
+    private struct LinkSession: Identifiable {
+        let id = UUID()
+        let token: String
+    }
 
     var body: some View {
         NavigationStack {
@@ -86,18 +95,18 @@ struct PlaidLinkSheet: View {
         .interactiveDismissDisabled(isBusy)
         .task { await linker.prepare(auth: auth) }
         .onChange(of: linker.phase) { _, new in
-            if case .readyToPresent(let t) = new { token = t; presenting = true }
+            if case .readyToPresent(let t) = new { session = LinkSession(token: t) }
             if case .done(let name) = new { onLinked(name) }
         }
-        .fullScreenCover(isPresented: $presenting) {
-            PlaidLinkView(token: token) { success in
+        .fullScreenCover(item: $session) { current in
+            PlaidLinkView(token: current.token) { success in
                 let id = success.metadata.institution.id
                 let name = success.metadata.institution.name
                 let publicToken = success.publicToken
-                presenting = false
+                session = nil
                 Task { await linker.complete(publicToken: publicToken, institutionId: id, institutionName: name, auth: auth) }
             } onExit: { exit in
-                presenting = false
+                session = nil
                 if let error = exit.error {
                     linker.fail(error.displayMessage ?? error.errorMessage)
                 } else {
@@ -109,7 +118,7 @@ struct PlaidLinkSheet: View {
                     Text("Couldn't open your bank connection").font(.headline)
                     Text(error.localizedDescription).font(.subheadline).foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
-                    Button("Close") { presenting = false; linker.fail(error.localizedDescription) }
+                    Button("Close") { session = nil; linker.fail(error.localizedDescription) }
                         .buttonStyle(.borderedProminent)
                 }
                 .padding(24)
