@@ -16,3 +16,4 @@ xcuserdata/
 build/
 Pods/
 *.resolved
+docs/
