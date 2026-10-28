@@ -185,15 +185,19 @@ struct InvestingView: View {
                 .pickerStyle(.segmented)
 
                 if points.count >= 2, let shown {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(money(shown.value))
-                            .font(.title2.bold()).monospacedDigit()
-                            .contentTransition(.numericText())
-                            .sensitive()
-                        Text(selectedDate != nil
-                             ? shown.date.formatted(.dateTime.month(.wide).day().year())
-                             : "\(change >= 0 ? "Up" : "Down") \(money(abs(change))) over this period")
-                            .font(.caption).foregroundStyle(.secondary).sensitive()
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(money(shown.value))
+                                .font(.title2.bold()).monospacedDigit()
+                                .contentTransition(.numericText())
+                                .sensitive()
+                            Text(selectedDate != nil
+                                 ? shown.date.formatted(.dateTime.month(.wide).day().year())
+                                 : "\(change >= 0 ? "Up" : "Down") \(money(abs(change))) over this period")
+                                .font(.caption).foregroundStyle(.secondary).sensitive()
+                        }
+                        Spacer(minLength: 8)
+                        PeriodChangeBadge(first: points.first?.value ?? 0, last: points.last?.value ?? 0)
                     }
                     Chart {
                         ForEach(points) { p in

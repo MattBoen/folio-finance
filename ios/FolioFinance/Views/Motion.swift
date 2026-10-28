@@ -132,3 +132,26 @@ extension View {
 
     func shimmer() -> some View { modifier(Shimmer()) }
 }
+
+// MARK: - Period change badge
+
+/// "+4.2%" pill for the top right of a chart: how much the line moved over the selected period.
+struct PeriodChangeBadge: View {
+    let first: Double
+    let last: Double
+
+    var body: some View {
+        if abs(first) > 0.5 {
+            let pct = (last - first) / abs(first) * 100
+            let up = pct >= 0
+            Label(String(format: "%@%.1f%%", up ? "+" : "−", abs(pct)), systemImage: up ? "arrow.up.right" : "arrow.down.right")
+                .font(.subheadline.weight(.semibold)).monospacedDigit()
+                .foregroundStyle(up ? Color.up : Color.down)
+                .padding(.horizontal, 10).padding(.vertical, 5)
+                .background((up ? Color.up : Color.down).opacity(0.14), in: Capsule())
+                .contentTransition(.numericText())
+                .animation(Motion.spring, value: pct)
+                .sensitive()
+        }
+    }
+}
