@@ -10,6 +10,7 @@ struct SettingsView: View {
     @Environment(\.openURL) private var openURL
     @ObservedObject private var ask = AskState.shared
     @State private var billingError: String?
+    @State private var showPaywall = false
 
     @State private var accountCount = 0
     @State private var banks: [PlaidItem] = []
@@ -59,8 +60,10 @@ struct SettingsView: View {
                         if let end = b.currentPeriodEnd, b.status != "none" {
                             infoRow(b.cancelAtPeriodEnd ? "Ends" : "Renews", end.formatted(date: .abbreviated, time: .omitted), symbol: "calendar")
                         }
-                        Button { Task { await manageBilling() } } label: {
-                            Label(b.status == "none" || b.status == "canceled" ? "Subscribe" : "Manage subscription", systemImage: "arrow.up.right.square")
+                        Button {
+                            if b.status == "none" || b.status == "canceled" { showPaywall = true } else { Task { await manageBilling() } }
+                        } label: {
+                            Label(b.status == "none" || b.status == "canceled" ? "Choose a plan" : "Manage subscription", systemImage: "arrow.up.right.square")
                         }
                         if let billingError { Text(billingError).font(.footnote).foregroundStyle(.red) }
                     } header: { Text("Subscription") } footer: {
@@ -109,6 +112,11 @@ struct SettingsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
             .fullScreenCover(isPresented: $showSetup) { OnboardingFlow { showSetup = false } }
+            .sheet(isPresented: $showPaywall) {
+                ZStack { Wash(tone: .balance); PaywallContent(onSkip: { showPaywall = false }) }
+                    .presentationDragIndicator(.visible)
+            }
+            .onChange(of: billing.status?.entitled) { _, ok in if ok == true { showPaywall = false } }
             .alert("Delete your account?", isPresented: $showDelete) {
                 SecureField("Password", text: $deletePassword)
                 Button("Delete Everything", role: .destructive) {
@@ -150,9 +158,7 @@ struct SettingsView: View {
     private func manageBilling() async {
         billingError = nil
         do {
-            let subscribed = billing.status.map { $0.status != "none" && $0.status != "canceled" } ?? false
-            let url = subscribed ? try await billing.portalURL(auth: auth) : try await billing.checkoutURL(interval: "year", auth: auth)
-            openURL(url)
+            openURL(try await billing.portalURL(auth: auth))
         } catch { billingError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription }
     }
 
