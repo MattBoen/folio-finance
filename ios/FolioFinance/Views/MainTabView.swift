@@ -24,23 +24,15 @@ struct MainTabView: View {
 /// Shows setup the first time a signed-in user has no accounts.
 struct RootView: View {
     @EnvironmentObject private var auth: AuthManager
-    @EnvironmentObject private var lock: AppLock
     @State private var showSetup = false
-    @State private var askFaceID = false
 
     var body: some View {
         MainTabView()
-            .fullScreenCover(isPresented: $showSetup, onDismiss: { maybeAskFaceID() }) {
+            .fullScreenCover(isPresented: $showSetup) {
                 OnboardingFlow {
                     auth.markSetupSeen()
                     showSetup = false
                 }
-            }
-            .alert("Open Folio with \(lock.biometryName)?", isPresented: $askFaceID) {
-                Button("Turn On") { Task { _ = await lock.enable() } }
-                Button("Not Now", role: .cancel) {}
-            } message: {
-                Text("You're signed in. Next time, \(lock.biometryName) can open Folio instead of your password. You can change this in the profile menu.")
             }
             .task {
                 #if DEBUG
@@ -51,13 +43,7 @@ struct RootView: View {
                     showSetup = true
                     return
                 }
-                maybeAskFaceID()
             }
     }
 
-    private func maybeAskFaceID() {
-        guard !auth.isDemo, lock.isAvailable, !lock.hasAsked, !lock.isEnabled else { return }
-        lock.hasAsked = true
-        Task { try? await Task.sleep(for: .milliseconds(600)); askFaceID = true }
-    }
 }

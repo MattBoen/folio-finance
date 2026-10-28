@@ -28,10 +28,10 @@ final class AuthManager: ObservableObject {
 
     init() {
         // The keychain survives deleting the app; UserDefaults doesn't. A fresh install starts signed out.
-        if !UserDefaults.standard.bool(forKey: "installMarkerV1") {
+        if !UserDefaults.standard.bool(forKey: "installMarkerV2") {
             keychain.delete(key: "access_token")
             keychain.delete(key: "refresh_token")
-            UserDefaults.standard.set(true, forKey: "installMarkerV1")
+            UserDefaults.standard.set(true, forKey: "installMarkerV2")
         }
         isAuthenticated = accessToken != nil
     }

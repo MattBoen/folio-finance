@@ -190,7 +190,6 @@ struct BrandMark: View {
 
 struct ProfileMenu: View {
     @EnvironmentObject private var auth: AuthManager
-    @EnvironmentObject private var lock: AppLock
     @AppStorage("hideAmounts") private var hide = false
     @State private var confirmSignOut = false
     @State private var showSetup = false
@@ -204,11 +203,6 @@ struct ProfileMenu: View {
                 Button { showSetup = true } label: { Label("Set up Folio", systemImage: "wand.and.stars") }
             }
             Toggle(isOn: $hide) { Label("Hide amounts", systemImage: "eye.slash") }
-            if !auth.isDemo {
-                Toggle(isOn: Binding(get: { lock.isEnabled }, set: { on in if on { Task { _ = await lock.enable() } } else { lock.isEnabled = false } })) {
-                    Label("Require \(lock.biometryName)", systemImage: "faceid")
-                }
-            }
             if auth.isDemo {
                 Section("Sample data") { Text("Changes aren't saved in demo mode") }
             }

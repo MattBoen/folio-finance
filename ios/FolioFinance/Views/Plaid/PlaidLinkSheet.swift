@@ -18,7 +18,6 @@ final class PlaidLinker: ObservableObject {
     enum Phase: Equatable {
         case idle
         case demo
-        case verifying
         case preparing
         case readyToPresent(token: String)
         case saving(institution: String?)
@@ -30,16 +29,6 @@ final class PlaidLinker: ObservableObject {
 
     func prepare(auth: AuthManager) async {
         if auth.isDemo { phase = .demo; return }
-        phase = .verifying
-        switch await StepUpAuth.challenge() {
-        case .verified: break
-        case .cancelled:
-            phase = .failed("To keep your accounts safe, Folio asks you to confirm it's you before connecting a bank.")
-            return
-        case .unavailable:
-            phase = .failed("Set a passcode on this iPhone (Settings > Face ID & Passcode) to connect bank accounts.")
-            return
-        }
         phase = .preparing
         do {
             let r: LinkTokenResponse = try await auth.withFreshToken(.linkToken)
@@ -139,19 +128,13 @@ struct PlaidLinkSheet: View {
 
     private var isBusy: Bool {
         switch linker.phase {
-        case .verifying, .preparing, .saving: true
+        case .preparing, .saving: true
         default: false
         }
     }
 
     @ViewBuilder private var content: some View {
         switch linker.phase {
-        case .verifying:
-            VStack(spacing: 14) {
-                Image(systemName: "faceid").font(.system(size: 52)).foregroundStyle(.tint)
-                Text("Confirm it's you").font(.title3.bold())
-                Text("A quick check keeps your accounts safe.").font(.subheadline).foregroundStyle(.secondary)
-            }
         case .idle, .preparing, .readyToPresent:
             progress("Getting a secure connection…", detail: nil)
         case .saving(let name):
