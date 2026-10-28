@@ -105,6 +105,7 @@ final class AuthManager: ObservableObject {
                 .register(email: email, password: password)
             )
             UserDefaults.standard.set(email, forKey: "currentEmail")
+            Self.forgetSetupSeen(email)
             self.store(response)
         }
     }
@@ -128,6 +129,7 @@ final class AuthManager: ObservableObject {
     func deleteAccount(password: String) async -> String? {
         do {
             let _: AnyDecodable = try await withFreshToken(.deleteMyAccount(password: password))
+            if let email = UserDefaults.standard.string(forKey: "currentEmail") { Self.forgetSetupSeen(email) }
             logout()
             return nil
         } catch {
@@ -139,6 +141,12 @@ final class AuthManager: ObservableObject {
     var hasSeenSetup: Bool {
         let email = UserDefaults.standard.string(forKey: "currentEmail") ?? ""
         return (UserDefaults.standard.stringArray(forKey: "setupSeenEmails") ?? []).contains(email)
+    }
+
+    /// A new account starts setup even if the same email used this phone before.
+    static func forgetSetupSeen(_ email: String) {
+        let seen = (UserDefaults.standard.stringArray(forKey: "setupSeenEmails") ?? []).filter { $0 != email }
+        UserDefaults.standard.set(seen, forKey: "setupSeenEmails")
     }
 
     func markSetupSeen() {

@@ -4,6 +4,7 @@ import SwiftUI
 struct PaywallContent: View {
     var onSignOut: (() -> Void)? = nil
     var onSkip: (() -> Void)? = nil
+    var skipTitle = "Not now"
 
     @EnvironmentObject private var auth: AuthManager
     @EnvironmentObject private var billing: BillingManager
@@ -68,7 +69,7 @@ struct PaywallContent: View {
                 HStack(spacing: 14) {
                     Link("Privacy Policy", destination: AppLinks.privacy)
                     Link("Terms", destination: AppLinks.terms)
-                    if let onSkip { Button("Not now", action: onSkip) }
+                    if let onSkip { Button(skipTitle, action: onSkip) }
                     if let onSignOut { Button("Sign out", action: onSignOut) }
                 }
                 .font(.caption.weight(.semibold))

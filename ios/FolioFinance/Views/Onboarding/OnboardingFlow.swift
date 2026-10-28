@@ -11,7 +11,6 @@ struct OnboardingFlow: View {
     @State private var accounts: [Account] = []
     @State private var showLink = false
     @State private var showManual = false
-    @State private var autoOpenedLink = false
     @State private var editing: Account?
     @State private var removing: Account?
 
@@ -26,13 +25,13 @@ struct OnboardingFlow: View {
                     case .plaid: PlaidExplainerStep(connect: { go(.connect) }, skip: { go(.car) })
                     case .connect:
                         ConnectStep(accounts: accounts, link: { showLink = true }, manual: { showManual = true },
-                                    edit: { editing = $0 }, hide: { a in Task { await hide(a) } }, remove: { removing = $0 },
+                                    pending: pendingBank, edit: { editing = $0 }, hide: { a in Task { await hide(a) } }, remove: { removing = $0 },
                                     next: { go(.car) })
                     case .car: CarStep(next: { go(.plan) })
                     case .plan: PlanStep(finish: afterPlan)
                     case .start:
-                        PaywallContent(onSkip: billing.locked ? nil : onFinish)
-                            .onChange(of: billing.status?.entitled) { _, ok in if ok == true { onFinish() } }
+                        PaywallContent(onSkip: onFinish, skipTitle: "Skip for now")
+                            .onChange(of: billing.status?.entitled) { _, ok in if ok == true && billing.status?.enforced == true { onFinish() } }
                     }
                 }
                 .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .move(edge: .leading).combined(with: .opacity)))
@@ -65,25 +64,16 @@ struct OnboardingFlow: View {
         .padding(.horizontal, 24).padding(.top, 16).padding(.bottom, 8)
     }
 
-    /// Setup connects through Plaid by default: arriving at the connect step with no accounts opens it straight away.
     private func go(_ s: Step) {
         withAnimation(Motion.spring) { step = s }
-        if s == .connect, accounts.isEmpty, !autoOpenedLink, !auth.isDemo {
-            autoOpenedLink = true
-            Task {
-                try? await Task.sleep(for: .milliseconds(450))
-                if step == .connect { showLink = true }
-            }
-        }
     }
 
-    /// The subscribe step only appears when billing is switched on and the customer hasn't subscribed yet.
-    private var steps: [Step] { Step.allCases.filter { $0 != .start || needsPaywall } }
-    private var needsPaywall: Bool { billing.status.map { $0.enforced && !$0.entitled } ?? false }
+    /// Billing is the last step. Everyone sees it during beta and can skip it for now.
+    private var steps: [Step] { Step.allCases }
 
-    private func afterPlan() {
-        if needsPaywall { go(.start) } else { onFinish() }
-    }
+    private func afterPlan() { go(.start) }
+
+    private var pendingBank: String? { PendingLink.load().map { $0.institutionName ?? "your bank" } }
 
     private func goBack() {
         let prev: Step = switch step {
@@ -220,6 +210,7 @@ private struct ConnectStep: View {
     let accounts: [Account]
     let link: () -> Void
     let manual: () -> Void
+    let pending: String?
     let edit: (Account) -> Void
     let hide: (Account) -> Void
     let remove: (Account) -> Void
@@ -228,9 +219,25 @@ private struct ConnectStep: View {
     var body: some View {
         StepScaffold(
             title: accounts.isEmpty ? "Add your accounts" : "\(accounts.count) account\(accounts.count == 1 ? "" : "s") added",
-            subtitle: accounts.isEmpty ? "Link banks, cards and investments, or enter a balance by hand." : "Tap an account to rename it. Touch and hold to remove it. Add more, or keep going."
+            subtitle: accounts.isEmpty ? "Link banks, cards and investments, or enter a balance by hand. You can add more any time." : "These are in Folio. Add another bank or card below, or tap Continue. Tap an account to rename it; touch and hold to remove it."
         ) {
             VStack(spacing: 14) {
+                if let pending {
+                    Button(action: link) {
+                        HStack(spacing: 12) {
+                            IconBadge(symbol: "exclamationmark.arrow.circlepath", color: .orange, size: 38)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Finish adding \(pending)").font(.headline)
+                                Text("You signed in but didn't finish. Tap to pick your accounts.").font(.footnote).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+                        }
+                        .padding(14).frame(maxWidth: .infinity)
+                        .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
                 if !accounts.isEmpty {
                     Card(padding: 0) {
                         VStack(spacing: 0) {
@@ -280,7 +287,7 @@ private struct ConnectStep: View {
                 .buttonStyle(.plain)
             }
         } footer: {
-            PrimaryButton(title: accounts.isEmpty ? "Not now" : "Continue", action: next)
+            PrimaryButton(title: "Continue", action: next)
         }
     }
 }
@@ -311,27 +318,20 @@ private struct PlanStep: View {
     @EnvironmentObject private var auth: AuthManager
     @State private var insights: Insights?
     @State private var stage = 0
-    @State private var creating = false
     @State private var showIncome = false
+    @State private var budgetMade = false
     @State private var error: String?
 
-    private let stages = ["Pulling in your transactions", "Finding your income", "Adding up your spending", "Drafting a budget"]
+    private let stages = ["Pulling in your transactions", "Finding your income", "Adding up your spending", "Building your budget"]
 
     var body: some View {
         StepScaffold(
-            title: insights == nil ? "Building your plan" : "Here's what we found",
+            title: insights == nil ? "Building your plan" : "Here's your plan",
             subtitle: insights == nil ? "Looking at your recent activity." : nil
         ) {
             if let insights { summary(insights) } else { analyzing }
         } footer: {
-            if let insights {
-                if insights.budget.items.isEmpty {
-                    PrimaryButton(title: "Finish", action: finish)
-                } else {
-                    PrimaryButton(title: "Create my budget", loading: creating) { Task { await create() } }
-                    Button("Skip for now", action: finish).font(.subheadline)
-                }
-            }
+            if insights != nil { PrimaryButton(title: "Continue", action: finish) }
         }
         .task { await run() }
         .sheet(isPresented: $showIncome) {
@@ -383,13 +383,16 @@ private struct PlanStep: View {
                 if !i.budget.items.isEmpty {
                     Card {
                         VStack(alignment: .leading, spacing: 10) {
-                            Text("Suggested budget").font(.subheadline).foregroundStyle(.secondary)
+                            HStack(spacing: 6) {
+                                Text(budgetMade ? "Your budget" : "Suggested budget").font(.subheadline).foregroundStyle(.secondary)
+                                if budgetMade { Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.up).font(.subheadline) }
+                            }
                             Text("\(money(i.budget.total)) a month").font(.title2.bold())
                             ForEach(i.budget.items.prefix(5)) { b in
                                 HStack { Text(b.category).font(.subheadline); Spacer(); Text(money(b.amount)).font(.subheadline.weight(.semibold)).monospacedDigit() }
                             }
                             if i.budget.items.count > 5 { Text("and \(i.budget.items.count - 5) more").font(.footnote).foregroundStyle(.secondary) }
-                            Text("Based on what you actually spend, trimmed a little where there's room. You can change every number later.")
+                            Text(budgetMade ? "Built from what you actually spend, trimmed a little where there's room. Change any number in the Budget tab." : "Based on what you actually spend. You can change every number later.")
                                 .font(.footnote).foregroundStyle(.secondary)
                         }
                     }
@@ -403,9 +406,12 @@ private struct PlanStep: View {
         async let fetched: Insights? = fetchInsights()
         // The last step waits for the real answer, so the checklist never finishes before the work does.
         for s in 1..<stages.count { try? await Task.sleep(for: .milliseconds(650)); withAnimation { stage = s } }
-        insights = await fetched
+        var result = await fetched
+        if let r = result, !r.budget.items.isEmpty { budgetMade = await createBudget() }
+        if budgetMade, let again: Insights = try? await auth.withFreshToken(.insights) { result = again }
         withAnimation { stage = stages.count }
-        if insights == nil { error = "Couldn't build your plan right now. You can find it later in the Budget tab." ; finish() }
+        insights = result
+        if insights == nil { error = "Couldn't build your plan right now. You'll find it in the Budget tab."; finish() }
     }
 
     /// A freshly linked bank needs a moment to hand over its history, so sync first and wait a little for it.
@@ -429,13 +435,13 @@ private struct PlanStep: View {
         if let r: Insights = try? await auth.withFreshToken(.insights) { insights = r }
     }
 
-    private func create() async {
-        creating = true
+    /// Every new customer gets a budget built from what Folio found, so they see what it can do. An existing budget is left alone.
+    private func createBudget() async -> Bool {
+        if let existing: BudgetsResponse = try? await auth.withFreshToken(.budgets), !existing.budgets.isEmpty { return true }
         do {
             let _: BudgetsResponse = try await auth.withFreshToken(.generateBudget)
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
-            finish()
-        } catch { self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription }
-        creating = false
+            NotificationCenter.default.post(name: .budgetsChanged, object: nil)
+            return true
+        } catch { return false }
     }
 }

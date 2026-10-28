@@ -71,6 +71,40 @@ private struct PlaidExchangeResult: Decodable, Sendable {
     let accounts: [ImportedAccount]?
 }
 
+/// A bank the customer signed in to but hasn't finished adding. Kept for a short while so a closed sheet, an app switch
+/// or a dropped connection never costs them the login. Plaid's one-time token is good for 30 minutes.
+struct PendingLink: Codable {
+    let publicToken: String
+    let institutionId: String?
+    let institutionName: String?
+    let accounts: [PendingAccount]
+    let savedAt: Date
+
+    struct PendingAccount: Codable { let id: String; let name: String; let mask: String? ; let group: String }
+
+    private static let key = "pendingPlaidLink"
+    private static let lifetime: TimeInterval = 25 * 60
+
+    static func save(_ r: LinkReview) {
+        let p = PendingLink(publicToken: r.publicToken, institutionId: r.institutionId, institutionName: r.institutionName,
+                            accounts: r.accounts.map { .init(id: $0.id, name: $0.name, mask: $0.mask, group: $0.group.rawValue) }, savedAt: Date())
+        if let data = try? JSONEncoder().encode(p) { UserDefaults.standard.set(data, forKey: key) }
+    }
+
+    static func clear() { UserDefaults.standard.removeObject(forKey: key) }
+
+    static func load() -> PendingLink? {
+        guard let data = UserDefaults.standard.data(forKey: key), let p = try? JSONDecoder().decode(PendingLink.self, from: data) else { return nil }
+        if Date().timeIntervalSince(p.savedAt) > lifetime { clear(); return nil }
+        return p
+    }
+
+    var review: LinkReview {
+        LinkReview(publicToken: publicToken, institutionId: institutionId, institutionName: institutionName,
+                   accounts: accounts.map { ReviewAccount(id: $0.id, name: $0.name, mask: $0.mask, group: AccountGroup(rawValue: $0.group) ?? .other) })
+    }
+}
+
 @MainActor
 final class PlaidLinker: ObservableObject {
     enum Phase: Equatable {
@@ -89,6 +123,8 @@ final class PlaidLinker: ObservableObject {
 
     func prepare(auth: AuthManager, reconnectItemId: String?) async {
         if auth.isDemo { phase = .demo; return }
+        // A bank signed in to earlier but never finished: pick up right where it stopped.
+        if reconnectItemId == nil, let pending = PendingLink.load() { phase = .review(pending.review); return }
         phase = .preparing
         do {
             let endpoint: Endpoint = reconnectItemId.map { .reconnectLinkToken(itemId: $0) } ?? .linkToken
@@ -104,7 +140,13 @@ final class PlaidLinker: ObservableObject {
         }
     }
 
-    func review(_ r: LinkReview) { phase = .review(r) }
+    func review(_ r: LinkReview) { PendingLink.save(r); phase = .review(r) }
+
+    /// Drop the saved login and start a fresh connection (for "use a different bank").
+    func discardPending(auth: AuthManager) async {
+        PendingLink.clear()
+        await prepare(auth: auth, reconnectItemId: nil)
+    }
 
     func add(_ r: LinkReview, accountIds: [String], auth: AuthManager) async {
         phase = .saving(institution: r.institutionName)
@@ -113,6 +155,7 @@ final class PlaidLinker: ObservableObject {
                 publicToken: r.publicToken, institutionId: r.institutionId, institutionName: r.institutionName,
                 accountIds: accountIds.isEmpty ? nil : accountIds
             ))
+            PendingLink.clear()
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             phase = .done(institution: result.institutionName ?? r.institutionName, accounts: result.accounts ?? [], synced: result.synced ?? true)
         } catch {
@@ -321,6 +364,8 @@ struct PlaidLinkSheet: View {
             }
             .buttonStyle(.borderedProminent).controlSize(.large)
             .disabled(!r.accounts.isEmpty && selected.isEmpty)
+            Button("Start over with a different bank") { Task { await linker.discardPending(auth: auth) } }
+                .font(.footnote)
         }
     }
 
