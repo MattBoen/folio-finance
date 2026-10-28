@@ -36,6 +36,7 @@ private struct EmptyWidget: View {
             Text("Open Folio to set up").font(.footnote.weight(.medium)).multilineTextAlignment(.center)
         }
         .foregroundStyle(.secondary)
+        .containerBackground(.background, for: .widget)
     }
 }
 
@@ -137,7 +138,7 @@ struct SpendingView: View {
             Text("spent").font(.caption).foregroundStyle(.secondary)
             Spacer(minLength: 0)
             if s.budgetTotal > 0 {
-                ProgressView(value: fraction(s)).tint(over ? .red : (fraction(s) > 0.85 ? .orange : .green))
+                bar(fraction(s), tint: over ? .red : (fraction(s) > 0.85 ? .orange : .green))
                 Text(s.hideAmounts ? "Budget" : over ? "\(money(-left(s), hide: false)) over budget" : "\(money(left(s), hide: false)) left of \(money(s.budgetTotal, hide: false))")
                     .font(.caption.weight(.medium)).lineLimit(1).minimumScaleFactor(0.7)
             } else {
@@ -146,6 +147,13 @@ struct SpendingView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .containerBackground(.background, for: .widget)
+    }
+
+    private func bar(_ f: Double, tint: Color) -> some View {
+        Capsule().fill(Color.primary.opacity(0.12)).frame(height: 8)
+            .overlay(alignment: .leading) {
+                GeometryReader { g in Capsule().fill(tint).frame(width: max(8, g.size.width * f)) }
+            }
     }
 
     private func gauge(_ s: WidgetSnapshot) -> some View {
