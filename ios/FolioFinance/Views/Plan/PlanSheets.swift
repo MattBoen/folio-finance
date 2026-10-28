@@ -128,12 +128,26 @@ struct IncomeBreakdown: View {
                                      subtitle: "Paid \(s.frequency)", value: money(s.monthly) + " / mo",
                                      fraction: inc.monthly > 0 ? s.monthly / inc.monthly : nil)
                     }),
-            ],
-            footnote: "Used for your savings rate and budget. Deposits are counted after taxes."
+            ] + depositsSection(inc),
+            footnote: "Only regular deposits into checking and savings count, from the last 6 months. Transfers between your own accounts and card payments are left out. Deposits are counted after taxes."
         ) {
             SheetAction(title: inc.source == "manual" ? "Edit or reset income" : "Edit income", symbol: "pencil", action: onEdit)
         }
     }
+
+    private func depositsSection(_ inc: Insights.Income) -> [BreakdownSection] {
+        guard let deposits = inc.deposits, !deposits.isEmpty else { return [] }
+        return [BreakdownSection(title: "Deposits we counted", rows: deposits.map { d in
+            BreakdownRow(symbol: "arrow.down.left", color: .green, title: d.name,
+                         subtitle: [shortDate(d.date), d.source == d.name ? nil : d.source].compactMap { $0 }.joined(separator: " · "),
+                         value: "+" + money(d.amount, cents: true), valueColor: .green)
+        })]
+    }
+}
+
+/// "Oct 23" from "2026-10-23".
+func shortDate(_ day: String) -> String {
+    parseDay(day)?.formatted(.dateTime.month(.abbreviated).day()) ?? day
 }
 
 // MARK: - Spending pattern
@@ -148,7 +162,7 @@ struct SpendingPatternBreakdown: View {
         BreakdownSheet(
             title: "Spending pattern",
             headline: money(o.monthlyAverage),
-            caption: "usual spending per month",
+            caption: o.window.map { "per month · averaged over \(shortDate($0.from)) – \(shortDate($0.to))" } ?? "usual spending per month",
             tone: .plan,
             sections: [
                 BreakdownSection(title: "Fixed vs flexible", rows: [
@@ -166,7 +180,7 @@ struct SpendingPatternBreakdown: View {
                                             fraction: c.monthlyAverage / total)
                     }),
             ],
-            footnote: "Averages over your recent months. Transfers and card payments aren't counted twice."
+            footnote: o.window.map { "Total spending from \(shortDate($0.from)) to \(shortDate($0.to)) divided by \(String(format: "%.1f", $0.months)) months. Transfers, card payments and anything you excluded aren't counted. Refunds reduce the total." } ?? "Averages over your recent months. Transfers and card payments aren't counted twice."
         )
     }
 }
@@ -296,27 +310,42 @@ struct HealthBreakdown: View {
         case .savings:
             guard income > 0 else { return [BreakdownRow(title: "Needs your income first", subtitle: "Add or confirm income on the Budget tab.", value: "")] }
             return [
-                BreakdownRow(title: "Income", value: money(income)),
-                BreakdownRow(title: "Usual spending", value: "−" + money(spending)),
+                BreakdownRow(title: "Income", subtitle: insights.income.source == "manual" ? "The amount you entered" : "From your regular deposits, per month", value: money(income)),
+                BreakdownRow(title: "Usual spending", subtitle: insights.outflow.window.map { "Average per month, \(shortDate($0.from)) to \(shortDate($0.to))" } ?? "Average per month", value: "−" + money(spending)),
                 BreakdownRow(title: "Left over", subtitle: "Left over ÷ income", value: money(income - spending), valueColor: income - spending >= 0 ? .green : .red),
             ]
         case .emergency:
             guard let m = h.emergencyFundMonths else { return [BreakdownRow(title: "Needs some spending history", value: "")] }
-            return [
-                BreakdownRow(title: "Cash on hand (about)", subtitle: "Checking and savings", value: money(m * spending)),
+            let cashRows = (h.inputs?.cashAccounts ?? []).map { a in
+                BreakdownRow(symbol: a.kind == "savings" ? "leaf.fill" : "banknote.fill",
+                             color: a.kind == "savings" ? AccountGroup.savings.color : AccountGroup.cash.color,
+                             title: a.name, subtitle: a.kind == "savings" ? "Savings" : "Checking", value: money(a.balance))
+            }
+            return cashRows + [
+                BreakdownRow(title: "Cash on hand", subtitle: "Checking and savings, not investments", value: money(h.inputs?.liquid ?? m * spending)),
                 BreakdownRow(title: "Usual monthly spending", value: money(spending)),
                 BreakdownRow(title: "Months covered", subtitle: "Cash ÷ monthly spending", value: String(format: "%.1f", m)),
             ]
         case .credit:
-            return [
+            let cards = (h.inputs?.cards ?? []).map { c in
+                BreakdownRow(symbol: "creditcard.fill", color: AccountGroup.credit.color, title: c.name,
+                             subtitle: c.limit.map { "Limit \(money($0))" } ?? "No limit reported, so not counted",
+                             value: money(c.balance), fraction: c.limit.map { $0 > 0 ? c.balance / $0 : 0 })
+            }
+            return cards + [
                 BreakdownRow(title: "Card balances ÷ card limits", subtitle: h.creditUtilization == nil
                     ? "Needs a card with a known limit. Connected cards usually include it." : "Using the limits your cards report.",
                              value: h.creditUtilization.map { metric.format($0) } ?? "—")
             ]
         case .debt:
-            return [
+            let payments = (h.inputs?.debtPayments ?? []).map { p in
+                BreakdownRow(symbol: "building.columns.fill", color: AccountGroup.loans.color, title: p.name,
+                             subtitle: shortDate(p.date), value: money(p.amount, cents: true))
+            }
+            return payments + [
+                BreakdownRow(title: "Debt payments per month", subtitle: "Loan and mortgage payments over the last 90 days", value: money(h.inputs?.debtMonthly ?? 0)),
                 BreakdownRow(title: "Monthly debt payments ÷ monthly income", subtitle: h.debtPaymentRatio == nil
-                    ? "Needs loan or card payments plus your income." : "Using your income of \(money(income)).",
+                    ? "Needs loan payments plus your income." : "Using your income of \(money(income)).",
                              value: h.debtPaymentRatio.map { metric.format($0) } ?? "—")
             ]
         }

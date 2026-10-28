@@ -35,6 +35,15 @@ describe("detectIncome", () => {
     expect(r.monthly).toBeCloseTo((2000 * 26) / 12, 1);
   });
 
+  it("lists the deposits it counted, newest first, matching each source", () => {
+    const dates = ["2026-08-14", "2026-08-28", "2026-09-11", "2026-09-25", "2026-10-09", "2026-10-23"];
+    const r = detectIncome(dates.map((d) => pay(d)), NOW, null);
+    expect(r.deposits).toHaveLength(6);
+    expect(r.deposits![0].date).toBe("2026-10-23");
+    expect(r.deposits![0].amount).toBe(2000);
+    expect(new Set(r.deposits!.map((d) => d.source))).toEqual(new Set([r.sources[0].name]));
+  });
+
   it("detects a monthly salary", () => {
     const r = detectIncome(["2026-07-01", "2026-08-01", "2026-09-01", "2026-10-01"].map((d) => pay(d, -5000, "Employer Direct Deposit")), NOW, null);
     expect(r.monthly).toBe(5000);
@@ -71,7 +80,7 @@ describe("detectIncome", () => {
   });
 
   it("reports nothing for a brand-new user", () => {
-    expect(detectIncome([], NOW, null)).toEqual({ monthly: 0, source: "none", confidence: "none", sources: [] });
+    expect(detectIncome([], NOW, null)).toEqual({ monthly: 0, source: "none", confidence: "none", sources: [], deposits: [] });
   });
 });
 
@@ -159,10 +168,10 @@ describe("buildInsights", () => {
 
   it("is all zeros and empty arrays for a brand-new user", () => {
     const r = buildInsights({ txns: [], accounts: [], now: NOW, incomeOverride: null, birthYear: null });
-    expect(r.income).toEqual({ monthly: 0, source: "none", confidence: "none", sources: [] });
+    expect(r.income).toEqual({ monthly: 0, source: "none", confidence: "none", sources: [], deposits: [] });
     expect(r.outflow).toEqual({ monthlyAverage: 0, fixed: 0, variable: 0, byCategory: [] });
     expect(r.budget).toEqual({ total: 0, items: [] });
-    expect(r.health).toEqual({ savingsRate: null, emergencyFundMonths: null, creditUtilization: null, debtPaymentRatio: null });
+    expect(r.health).toEqual({ savingsRate: null, emergencyFundMonths: null, creditUtilization: null, debtPaymentRatio: null, inputs: { cashAccounts: [], liquid: 0, cards: [], debtPayments: [], debtMonthly: 0 } });
     expect(r.investing).toEqual({ totalInvested: 0, allocation: [], notes: [] });
     expect(r.dataQuality).toEqual({ monthsOfData: 0, transactionCount: 0 });
   });

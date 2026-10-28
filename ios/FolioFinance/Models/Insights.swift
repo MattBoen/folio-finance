@@ -14,6 +14,16 @@ struct Insights: Decodable, Sendable {
         let source: String        // "detected" | "manual" | "none"
         let confidence: String    // "high" | "medium" | "low" | "none"
         let sources: [IncomeSource]
+        /// The deposits counted toward income, newest first.
+        let deposits: [Deposit]?
+    }
+
+    struct Deposit: Decodable, Sendable, Identifiable {
+        let date: String
+        let name: String
+        let amount: Double
+        let source: String
+        var id: String { date + name + String(amount) }
     }
 
     struct IncomeSource: Decodable, Sendable, Identifiable {
@@ -28,6 +38,15 @@ struct Insights: Decodable, Sendable {
         let fixed: Double
         let variable: Double
         let byCategory: [CategoryOutflow]
+        /// The stretch of history the average covers.
+        let window: Window?
+    }
+
+    struct Window: Decodable, Sendable {
+        let from: String
+        let to: String
+        let days: Int
+        let months: Double
     }
 
     struct CategoryOutflow: Decodable, Sendable, Identifiable {
@@ -54,6 +73,20 @@ struct Insights: Decodable, Sendable {
         let emergencyFundMonths: Double?
         let creditUtilization: Double?
         let debtPaymentRatio: Double?
+        /// The exact accounts and payments behind each number.
+        let inputs: Inputs?
+    }
+
+    struct Inputs: Decodable, Sendable {
+        let cashAccounts: [CashAccount]
+        let liquid: Double
+        let cards: [Card]
+        let debtPayments: [Payment]
+        let debtMonthly: Double
+
+        struct CashAccount: Decodable, Sendable { let name: String; let balance: Double; let kind: String }
+        struct Card: Decodable, Sendable { let name: String; let balance: Double; let limit: Double? }
+        struct Payment: Decodable, Sendable { let date: String; let name: String; let amount: Double }
     }
 
     struct Investing: Decodable, Sendable {

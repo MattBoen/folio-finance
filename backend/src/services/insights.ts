@@ -13,6 +13,7 @@ export interface InTxn {
 }
 
 export interface InAcct {
+  name?: string;
   type: string;
   subtype: string | null;
   balance: number;
@@ -21,9 +22,12 @@ export interface InAcct {
 }
 
 export interface IncomeSource { name: string; monthly: number; frequency: string }
-export interface IncomeResult { monthly: number; source: "detected" | "manual" | "none"; confidence: "high" | "medium" | "low" | "none"; sources: IncomeSource[] }
+/** A deposit that was counted as income, so the app can show exactly what went into the number. */
+export interface IncomeDeposit { date: string; name: string; amount: number; source: string }
+export interface IncomeResult { monthly: number; source: "detected" | "manual" | "none"; confidence: "high" | "medium" | "low" | "none"; sources: IncomeSource[]; deposits?: IncomeDeposit[] }
 export interface CategoryOutflow { category: string; monthlyAverage: number; isFixed: boolean }
-export interface OutflowResult { monthlyAverage: number; fixed: number; variable: number; byCategory: CategoryOutflow[]; fixedByCategory: Record<string, number> }
+export interface OutflowWindow { from: string; to: string; days: number; months: number }
+export interface OutflowResult { monthlyAverage: number; fixed: number; variable: number; byCategory: CategoryOutflow[]; fixedByCategory: Record<string, number>; window?: OutflowWindow }
 export interface BudgetItem { category: string; amount: number }
 
 const DAY = 86_400_000;
@@ -120,6 +124,7 @@ export function detectIncome(txns: InTxn[], now: string, override: number | null
   }
 
   const sources: IncomeSource[] = [];
+  const deposits: IncomeDeposit[] = [];
   const recurringKeys = new Set<string>();
   let minCount = Infinity;
   for (const [k, rows] of groups) {
@@ -130,7 +135,9 @@ export function detectIncome(txns: InTxn[], now: string, override: number | null
     recurringKeys.add(k);
     minCount = Math.min(minCount, rec.count);
     const latest = [...rows].sort((a, b) => b.date.localeCompare(a.date))[0];
-    sources.push({ name: titleCase(latest.name.toLowerCase()), monthly: r2(rec.typical * PER_MONTH[rec.frequency]), frequency: rec.frequency });
+    const sourceName = titleCase(latest.name.toLowerCase());
+    sources.push({ name: sourceName, monthly: r2(rec.typical * PER_MONTH[rec.frequency]), frequency: rec.frequency });
+    for (const r of rows) deposits.push({ date: r.date, name: r.name, amount: r2(-r.amount), source: sourceName });
   }
 
   // Everything else that is plainly income (freelance, side work): typical month over the months we can see.
@@ -150,19 +157,23 @@ export function detectIncome(txns: InTxn[], now: string, override: number | null
     if (months.length === 0) months.push(curMonth);
     const totals = months.map((m) => irregular.filter((t) => monthKey(t.date) === m).reduce((s, t) => s - t.amount, 0));
     irregularMonthly = median(totals);
-    if (irregularMonthly > 0) sources.push({ name: "Other deposits", monthly: r2(irregularMonthly), frequency: "irregular" });
+    if (irregularMonthly > 0) {
+      sources.push({ name: "Other deposits", monthly: r2(irregularMonthly), frequency: "irregular" });
+      for (const r of irregular) deposits.push({ date: r.date, name: r.name, amount: r2(-r.amount), source: "Other deposits" });
+    }
   }
 
   const recurringMonthly = sources.filter((s) => s.frequency !== "irregular").reduce((s, x) => s + x.monthly, 0);
   const detected = r2(recurringMonthly + (irregularMonthly > 0 ? irregularMonthly : 0));
   sources.sort((a, b) => b.monthly - a.monthly);
+  const recent = deposits.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 24);
 
   if (override != null) {
-    return { monthly: r2(override), source: "manual", confidence: "high", sources };
+    return { monthly: r2(override), source: "manual", confidence: "high", sources, deposits: recent };
   }
-  if (detected <= 0) return { monthly: 0, source: "none", confidence: "none", sources: [] };
+  if (detected <= 0) return { monthly: 0, source: "none", confidence: "none", sources: [], deposits: [] };
   const confidence = recurringKeys.size > 0 ? (minCount >= 4 ? "high" : "medium") : "low";
-  return { monthly: detected, source: "detected", confidence, sources };
+  return { monthly: detected, source: "detected", confidence, sources, deposits: recent };
 }
 
 // ── Outflow ───────────────────────────────────────────────────────────────────
@@ -226,7 +237,8 @@ export function computeOutflow(txns: InTxn[], now: string): OutflowResult {
     byCategory.push({ category: cat, monthlyAverage: r2(monthly), isFixed: f >= monthly * 0.5 });
   }
   byCategory.sort((a, b) => b.monthlyAverage - a.monthlyAverage);
-  return { monthlyAverage: r2(all), fixed: r2(fixed), variable: r2(all - fixed), byCategory, fixedByCategory };
+  const window: OutflowWindow = { from: eff < W ? earliest : cutoff, to: now, days: Math.round(eff), months: r2(months) };
+  return { monthlyAverage: r2(all), fixed: r2(fixed), variable: r2(all - fixed), byCategory, fixedByCategory, window };
 }
 
 // ── Budget ────────────────────────────────────────────────────────────────────
@@ -293,7 +305,19 @@ export function buildInsights(input: InsightsInput) {
   const span = Math.min(90, daysBetween(earliest, now) + 1);
   const debtMonthly = debtTxns.reduce((s, t) => s + t.amount, 0) / (span >= 14 ? span / 30.4 : 1);
 
+  // The exact inputs behind each health number, so the app can show its working.
+  const inputs = {
+    cashAccounts: live
+      .filter((a) => a.type === "depository")
+      .map((a) => ({ name: a.name ?? "Account", balance: r2(a.balance), kind: isSavings(a) ? "savings" : "cash" })),
+    liquid: r2(liquid),
+    cards: cards.map((a) => ({ name: a.name ?? "Card", balance: r2(a.balance), limit: a.limit != null ? r2(a.limit) : null })),
+    debtPayments: [...debtTxns].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 12).map((t) => ({ date: t.date, name: t.name, amount: r2(t.amount) })),
+    debtMonthly: r2(debtMonthly),
+  };
+
   const health = {
+    inputs,
     savingsRate: income.monthly > 0 && outflow.monthlyAverage > 0 ? r2((income.monthly - outflow.monthlyAverage) / income.monthly) : null,
     emergencyFundMonths: outflow.monthlyAverage > 0 && liquid > 0 ? Math.round((liquid / outflow.monthlyAverage) * 10) / 10 : null,
     creditUtilization: utilization == null ? null : r2(utilization),
@@ -313,7 +337,7 @@ export function buildInsights(input: InsightsInput) {
   const months = new Set(txns.map((t) => monthKey(t.date)));
   return {
     income,
-    outflow: { monthlyAverage: outflow.monthlyAverage, fixed: outflow.fixed, variable: outflow.variable, byCategory: outflow.byCategory },
+    outflow: { monthlyAverage: outflow.monthlyAverage, fixed: outflow.fixed, variable: outflow.variable, byCategory: outflow.byCategory, window: outflow.window },
     budget,
     health,
     investing: { totalInvested: r2(invested), allocation, notes },

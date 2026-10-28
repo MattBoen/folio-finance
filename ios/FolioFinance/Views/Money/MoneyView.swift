@@ -37,7 +37,13 @@ struct MoneyView: View {
                     ForEach(Segment.allCases) { Text($0.rawValue).tag($0) }
                 }
                 .pickerStyle(.segmented)
-                .padding(.horizontal, 16).padding(.vertical, 8)
+                .padding(.horizontal, 16).padding(.top, 6).padding(.bottom, 12)
+                .background {
+                    // Frosted like a system bar, so content scrolling underneath is blurred behind the switch.
+                    Rectangle().fill(.regularMaterial)
+                        .overlay(alignment: .bottom) { Divider().opacity(0.5) }
+                        .ignoresSafeArea(edges: .top)
+                }
             }
             .toolbar { ToolbarItem(placement: .topBarTrailing) { ProfileMenu() } }
             .navigationTitle("")

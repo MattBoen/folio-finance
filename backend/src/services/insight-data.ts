@@ -52,6 +52,7 @@ export async function loadInsightInputs(userId: string, now: string, lookbackDay
   const acctRows = await db
     .select({
       type: accounts.type,
+      name: accounts.name,
       subtype: accounts.subtype,
       balance: accounts.balanceCurrent,
       limit: accounts.balanceLimit,
@@ -61,6 +62,7 @@ export async function loadInsightInputs(userId: string, now: string, lookbackDay
     .where(and(eq(accounts.userId, userId), isNull(accounts.deletedAt)));
 
   const accts: InAcct[] = acctRows.map((a) => ({
+    name: a.name,
     type: a.type,
     subtype: a.subtype,
     balance: parseFloat(a.balance ?? "0"),
