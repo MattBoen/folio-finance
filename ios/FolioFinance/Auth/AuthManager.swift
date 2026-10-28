@@ -6,6 +6,8 @@ final class AuthManager: ObservableObject {
     @Published private(set) var isLoading = false
     @Published private(set) var error: String?
     @Published private(set) var isDemo = false
+    /// Set when the email has no account yet; the sign-in screen asks before creating one.
+    @Published var pendingNewAccount: String?
 
     private let keychain = KeychainService.shared
     private let api = APIClient.shared
@@ -46,6 +48,49 @@ final class AuthManager: ObservableObject {
             } catch APIError.unauthorized {
                 throw APIError.server(401, "That email and password don't match.")
             }
+        }
+    }
+
+    /// One button for both: signs in when the email has an account, otherwise offers to create one.
+    func continueWithEmail(email: String, password: String) async {
+        let email = Self.normalized(email)
+        await perform {
+            struct Check: Decodable { let exists: Bool }
+            let known: Bool? = (try? await self.api.request(.checkEmail(email)) as Check)?.exists
+
+            if known == true {
+                try await self.signIn(email: email, password: password)
+                return
+            }
+            if known == false {
+                guard password.count >= 8 else {
+                    throw APIError.server(400, "New to Folio? Choose a password with at least 8 characters to create your account.")
+                }
+                self.pendingNewAccount = email
+                return
+            }
+            // Older server without the check route: try signing in, then offer to create.
+            do {
+                try await self.signIn(email: email, password: password)
+            } catch APIError.unauthorized {
+                guard password.count >= 8 else { throw APIError.server(401, "That email and password don't match.") }
+                self.pendingNewAccount = email
+            }
+        }
+    }
+
+    func createAccountAfterConfirm(email: String, password: String) async {
+        pendingNewAccount = nil
+        await register(email: email, password: password)
+    }
+
+    private func signIn(email: String, password: String) async throws {
+        do {
+            let response: AuthResponse = try await api.request(.login(email: email, password: password))
+            UserDefaults.standard.set(email, forKey: "currentEmail")
+            store(response)
+        } catch APIError.unauthorized {
+            throw APIError.server(401, "That email and password don't match.")
         }
     }
 
@@ -289,6 +334,13 @@ enum DemoData {
 
     private static let accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0["id"] as! String, $0["name"] as! String) })
 
+    /// Made-up storefront locations for the sample data (online merchants have none).
+    private static let places: [String: (Double, Double)] = [
+        "Whole Foods": (37.7712, -122.4114), "Trader Joe's": (37.7842, -122.4392), "Blue Bottle Coffee": (37.7762, -122.4231),
+        "Chipotle": (37.7899, -122.4034), "Shell": (37.7655, -122.4180), "AMC Theatres": (37.7849, -122.4066),
+        "CVS Pharmacy": (37.7721, -122.4318), "Planet Fitness": (37.7788, -122.4195),
+    ]
+
     private static let transactions: [[String: Any]] = {
         let now = Date()
         var rows: [[String: Any]] = []
@@ -297,12 +349,15 @@ enum DemoData {
             for (k, t) in templates.enumerated() where i % t.every == t.offset {
                 let r = Double((i * 31 + k * 17) % 100) / 100
                 let amount = t.low + (t.high - t.low) * r
-                rows.append([
+                var row: [String: Any] = [
                     "id": "demo-\(i)-\(k)", "account_id": t.account, "account_name": accountNames[t.account] ?? "",
                     "amount": String(format: "%.2f", t.income ? -amount : amount), "date": dayString(date),
                     "name": t.name, "merchant_name": t.name, "category_name": t.category,
                     "is_pending": i == 0 && k % 2 == 0, "is_excluded": false,
-                ])
+                ]
+                // Like the server, send coordinates as numeric strings.
+                if let p = places[t.name] { row["lat"] = String(p.0); row["lon"] = String(p.1) }
+                rows.append(row)
             }
         }
         return rows

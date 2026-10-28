@@ -29,6 +29,7 @@
 		AA0000000000000000000105 /* Insights.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000104 /* Insights.swift */; };
 		AA0000000000000000000108 /* OnboardingFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000107 /* OnboardingFlow.swift */; };
 		AA000000000000000000010B /* CarEntryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000010A /* CarEntryView.swift */; };
+		AA000000000000000000010D /* TransactionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000010C /* TransactionDetailView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -54,6 +55,7 @@
 		AA0000000000000000000104 /* Insights.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Insights.swift; sourceTree = "<group>"; };
 		AA0000000000000000000107 /* OnboardingFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFlow.swift; sourceTree = "<group>"; };
 		AA000000000000000000010A /* CarEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarEntryView.swift; sourceTree = "<group>"; };
+		AA000000000000000000010C /* TransactionDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionDetailView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -171,6 +173,7 @@
 		AA000000000000000000003A /* Transactions */ = {
 			isa = PBXGroup;
 			children = (
+				AA000000000000000000010C /* TransactionDetailView.swift */,
 				AA0000000000000000000019 /* TransactionsView.swift */,
 			);
 			path = Transactions;
@@ -291,6 +294,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AA000000000000000000010D /* TransactionDetailView.swift in Sources */,
 				AA000000000000000000010B /* CarEntryView.swift in Sources */,
 				AA0000000000000000000108 /* OnboardingFlow.swift in Sources */,
 				AA0000000000000000000105 /* Insights.swift in Sources */,

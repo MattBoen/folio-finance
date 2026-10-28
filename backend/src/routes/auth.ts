@@ -53,6 +53,21 @@ async function issueTokenPair(userId: string, plan: string) {
   return { accessToken, refreshToken: raw };
 }
 
+// POST /auth/check: lets the app offer one "Continue" button that signs in or creates an account
+auth.post(
+  "/check",
+  rateLimit({ max: 20, windowMs: 60_000 }),
+  zValidator("json", z.object({ email: emailField })),
+  async (c) => {
+    const { email } = c.req.valid("json");
+    const [existing] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(and(eq(users.email, email), isNull(users.deletedAt)));
+    return c.json({ exists: Boolean(existing) });
+  }
+);
+
 // POST /auth/register
 auth.post(
   "/register",

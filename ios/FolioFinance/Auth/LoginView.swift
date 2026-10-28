@@ -5,15 +5,12 @@ struct LoginView: View {
 
     @State private var email = ""
     @State private var password = ""
-    @State private var isRegistering = false
     @State private var slow = false
     @FocusState private var focus: Field?
 
     private enum Field { case email, password }
 
-    private var canSubmit: Bool {
-        email.contains("@") && password.count >= (isRegistering ? 8 : 1) && !auth.isLoading
-    }
+    private var canSubmit: Bool { email.contains("@") && !password.isEmpty && !auth.isLoading }
 
     var body: some View {
         ZStack {
@@ -38,7 +35,7 @@ struct LoginView: View {
                             VStack(spacing: 0) {
                                 TextField("Email", text: $email)
                                     .keyboardType(.emailAddress)
-                                    .textContentType(.emailAddress)
+                                    .textContentType(.username)
                                     .textInputAutocapitalization(.never)
                                     .autocorrectionDisabled()
                                     .submitLabel(.next)
@@ -46,8 +43,8 @@ struct LoginView: View {
                                     .onSubmit { focus = .password }
                                     .padding(16)
                                 Divider().padding(.leading, 16)
-                                SecureField(isRegistering ? "Password (8+ characters)" : "Password", text: $password)
-                                    .textContentType(isRegistering ? .newPassword : .password)
+                                SecureField("Password", text: $password)
+                                    .textContentType(.password)
                                     .submitLabel(.go)
                                     .focused($focus, equals: .password)
                                     .onSubmit(submit)
@@ -68,10 +65,9 @@ struct LoginView: View {
                                 if auth.isLoading {
                                     ProgressView().tint(.white)
                                 } else {
-                                    Text(isRegistering ? "Create account" : "Sign in")
+                                    Text("Continue").font(.headline)
                                 }
                             }
-                            .font(.headline)
                             .frame(maxWidth: .infinity)
                             .frame(height: 30)
                         }
@@ -80,7 +76,7 @@ struct LoginView: View {
                         .disabled(!canSubmit)
 
                         if slow && auth.isLoading {
-                            Label("Waking up the server. The first sign-in after a while can take up to a minute.", systemImage: "clock")
+                            Label("Waking up the server. The first request after a while can take up to a minute.", systemImage: "clock")
                                 .font(.footnote).foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 6)
                         }
@@ -98,23 +94,11 @@ struct LoginView: View {
                     }
                     .padding(.horizontal, 20)
 
-                    if isRegistering {
-                        Text("By creating an account you agree to our [Privacy Policy](\(AppLinks.privacy.absoluteString)).")
-                            .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center).padding(.horizontal, 32)
-                    }
-
-                    Button {
-                        withAnimation(.snappy) { isRegistering.toggle() }
-                        auth.clearError()
-                    } label: {
-                        HStack(spacing: 4) {
-                            Text(isRegistering ? "Already have an account?" : "New to Folio?")
-                                .foregroundStyle(.secondary)
-                            Text(isRegistering ? "Sign in" : "Create an account")
-                                .fontWeight(.semibold)
-                        }
-                        .font(.subheadline)
-                    }
+                    Text("New here? Just enter your email and a password. We'll set up your account.\nBy continuing you agree to our [Privacy Policy](\(AppLinks.privacy.absoluteString)).")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
                 }
                 .padding(.bottom, 40)
             }
@@ -126,17 +110,25 @@ struct LoginView: View {
                 if !Task.isCancelled { slow = true }
             }
         }
+        .confirmationDialog(
+            "Create your Folio account?",
+            isPresented: Binding(get: { auth.pendingNewAccount != nil }, set: { if !$0 { auth.pendingNewAccount = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Create account") {
+                // The dialog clears the pending email as it closes, so use what's in the field.
+                let e = email, p = password
+                Task { await auth.createAccountAfterConfirm(email: e, password: p) }
+            }
+            Button("Edit email", role: .cancel) { focus = .email }
+        } message: {
+            Text("We don't see an account for \(auth.pendingNewAccount ?? "this email") yet. Create one with the password you entered?")
+        }
     }
 
     private func submit() {
         guard canSubmit else { return }
         focus = nil
-        Task {
-            if isRegistering {
-                await auth.register(email: email, password: password)
-            } else {
-                await auth.login(email: email, password: password)
-            }
-        }
+        Task { await auth.continueWithEmail(email: email, password: password) }
     }
 }

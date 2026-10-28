@@ -11,6 +11,7 @@ struct SpendingView: View {
     @State private var error: String?
     @State private var selected: String?
     @State private var showAdd = false
+    @State private var detail: Transaction?
 
     struct Slice: Identifiable {
         let id: String
@@ -67,8 +68,8 @@ struct SpendingView: View {
                             }
                             .buttonStyle(.borderedProminent).controlSize(.large)
                         } else if !expenses.isEmpty {
-                            donutCard
-                            statsCard
+                            donutCard.flowIn()
+                            statsCard.flowIn()
                             categoriesCard
                         }
                     }
@@ -85,6 +86,10 @@ struct SpendingView: View {
                 }
             }
             .sheet(isPresented: $showAdd) { AddTransactionSheet { Task { await load() } } }
+            .sheet(item: $detail) { t in
+                TransactionDetailView(transaction: t, all: transactions) { Task { await load() } }
+            }
+            .sensoryFeedback(.selection, trigger: month)
         }
         .task(id: month) { await load() }
     }
@@ -158,6 +163,8 @@ struct SpendingView: View {
         VStack(spacing: 3) {
             Text(money(value)).font(.title3.bold()).monospacedDigit().foregroundStyle(color)
                 .minimumScaleFactor(0.7).lineLimit(1).sensitive()
+                .contentTransition(.numericText())
+                .animation(.smooth, value: value)
             Text(label).font(.caption).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
@@ -167,40 +174,86 @@ struct SpendingView: View {
         let list = slices
         let top = list.first?.value ?? 1
         return VStack(spacing: 8) {
-            SectionTitle("Categories")
+            SectionTitle("Categories", trailing: "Tap to see transactions")
             Card(padding: 0) {
                 VStack(spacing: 0) {
                     ForEach(list) { s in
-                        Button {
-                            withAnimation(.snappy) { selected = selected == s.id ? nil : s.id }
-                        } label: {
-                            HStack(spacing: 12) {
-                                IconBadge(symbol: s.symbol, color: s.color, size: 36)
-                                VStack(alignment: .leading, spacing: 6) {
-                                    HStack {
-                                        Text(s.id).font(.body)
-                                        Spacer()
-                                        Text(money(s.value)).font(.body.weight(.semibold)).monospacedDigit().sensitive()
-                                    }
-                                    GeometryReader { geo in
-                                        Capsule().fill(s.color.opacity(0.18))
-                                            .overlay(alignment: .leading) {
-                                                Capsule().fill(s.color).frame(width: max(6, geo.size.width * s.value / top))
-                                            }
-                                    }
-                                    .frame(height: 6)
-                                }
-                            }
-                            .padding(.horizontal, 16).padding(.vertical, 11)
-                            .background(selected == s.id ? s.color.opacity(0.08) : .clear)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
+                        categoryRow(s, top: top)
+                        if selected == s.id { transactionList(for: s) }
                         if s.id != list.last?.id { Divider().padding(.leading, 64) }
                     }
                 }
+                .animation(.smooth, value: selected)
             }
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .sensoryFeedback(.selection, trigger: selected)
         }
+        .flowIn()
+    }
+
+    private func categoryRow(_ s: Slice, top: Double) -> some View {
+        let open = selected == s.id
+        return Button {
+            withAnimation(.smooth) { selected = open ? nil : s.id }
+        } label: {
+            HStack(spacing: 12) {
+                IconBadge(symbol: s.symbol, color: s.color, size: 36)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text(s.id).font(.body)
+                        Spacer()
+                        Text(money(s.value)).font(.body.weight(.semibold)).monospacedDigit().sensitive()
+                    }
+                    GeometryReader { geo in
+                        Capsule().fill(s.color.opacity(0.18))
+                            .overlay(alignment: .leading) {
+                                Capsule().fill(s.color).frame(width: max(6, geo.size.width * s.value / top))
+                            }
+                    }
+                    .frame(height: 6)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold)).foregroundStyle(.tertiary)
+                    .rotationEffect(.degrees(open ? 90 : 0))
+            }
+            .padding(.horizontal, 16).padding(.vertical, 11)
+            .background(open ? s.color.opacity(0.08) : .clear)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Every transaction in this category for the month, right under its row.
+    private func transactionList(for s: Slice) -> some View {
+        let rows = expenses.filter { $0.category == s.id }.sorted { $0.date > $1.date }
+        return VStack(spacing: 0) {
+            ForEach(rows) { t in
+                Button { detail = t } label: {
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(parseDay(t.date)?.formatted(.dateTime.month(.abbreviated).day()) ?? t.date)
+                                .font(.caption).foregroundStyle(.secondary)
+                            if t.isPending { Text("Pending").font(.caption2).foregroundStyle(.orange) }
+                        }
+                        .frame(width: 52, alignment: .leading)
+                        Text(t.displayName).font(.subheadline).lineLimit(1)
+                        Spacer(minLength: 8)
+                        Text(money(t.doubleAmount, cents: true)).font(.subheadline.weight(.medium)).monospacedDigit().sensitive()
+                        Image(systemName: "chevron.right").font(.caption2.weight(.bold)).foregroundStyle(.quaternary)
+                    }
+                    .padding(.leading, 64).padding(.trailing, 16).padding(.vertical, 9)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                Divider().padding(.leading, 64)
+            }
+            Text("\(rows.count) transaction\(rows.count == 1 ? "" : "s") in \(month.formatted(.dateTime.month(.wide)))")
+                .font(.caption).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, 64).padding(.vertical, 9)
+        }
+        .background(s.color.opacity(0.05))
+        .transition(.opacity.combined(with: .move(edge: .top)))
     }
 
     // MARK: Data

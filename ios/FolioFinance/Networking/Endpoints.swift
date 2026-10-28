@@ -45,6 +45,10 @@ extension Endpoint {
         .post("/auth/register", body: ["email": email, "password": password])
     }
 
+    static func checkEmail(_ email: String) -> Endpoint {
+        .post("/auth/check", body: ["email": email])
+    }
+
     static func refresh(token: String) -> Endpoint {
         struct Body: Encodable { let refreshToken: String }
         return .post("/auth/refresh", body: Body(refreshToken: token))

@@ -201,6 +201,15 @@ struct CarEntryView: View {
         }
     }
 
+    /// Servers sometimes send every trim as one comma-separated string; always show them as separate choices.
+    private static func splitTrims(_ values: [String]) -> [String] {
+        var seen = Set<String>()
+        return values
+            .flatMap { $0.components(separatedBy: ",") }
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
+    }
+
     private func reset(toManual: Bool) {
         draft = Draft(); trimOptions = []; found = false; manual = toManual; error = nil; vin = ""
     }
@@ -212,10 +221,12 @@ struct CarEntryView: View {
         busy = true; error = nil
         do {
             let r: VehicleLookup = try await auth.withFreshToken(.vehicleLookup(vin: vin, miles: miles))
-            draft = Draft(vin: r.vin ?? vin, year: String(r.year), make: r.make, model: r.model, trim: r.trim ?? "",
+            let candidates = Self.splitTrims((r.trims ?? []) + (r.trim.map { [$0] } ?? []))
+            draft = Draft(vin: r.vin ?? vin, year: String(r.year), make: r.make, model: r.model,
+                          trim: candidates.count == 1 ? candidates[0] : "",
                           miles: String(miles), value: String(Int(r.estimatedValue.rounded())), details: r.details,
                           range: (r.lowValue, r.highValue), source: r.source)
-            trimOptions = r.trims ?? (r.trim.map { [$0] } ?? [])
+            trimOptions = candidates
             found = true
         } catch { self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription }
         busy = false
@@ -228,7 +239,7 @@ struct CarEntryView: View {
         try? await Task.sleep(for: .milliseconds(600))
         if Task.isCancelled { return }
         if let r: TrimsResponse = try? await auth.withFreshToken(.vehicleTrims(year: y, make: make, model: model)) {
-            trimOptions = r.trims
+            trimOptions = Self.splitTrims(r.trims)
         }
         await reestimate()
     }
