@@ -19,25 +19,24 @@ struct MoneyView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                switch segment {
-                case .transactions: TransactionsView(embedded: true)
-                case .accounts: AccountsView(embedded: true)
-                }
+            ZStack {
+                TransactionsView(embedded: true, active: segment == .transactions)
+                    .opacity(segment == .transactions ? 1 : 0)
+                    .allowsHitTesting(segment == .transactions)
+                AccountsView(embedded: true, active: segment == .accounts)
+                    .opacity(segment == .accounts ? 1 : 0)
+                    .allowsHitTesting(segment == .accounts)
             }
-            .id(segment)
-            .transition(.opacity)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Picker("Show", selection: Binding(get: { segment }, set: { v in withAnimation(.smooth(duration: 0.3)) { segmentRaw = v.rawValue } })) {
-                        ForEach(Segment.allCases) { Text($0.rawValue).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 230)
+            .animation(.smooth(duration: 0.25), value: segment)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                Picker("Show", selection: Binding(get: { segment }, set: { segmentRaw = $0.rawValue })) {
+                    ForEach(Segment.allCases) { Text($0.rawValue).tag($0) }
                 }
-                ToolbarItem(placement: .topBarTrailing) { ProfileMenu() }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 16).padding(.vertical, 8)
             }
-            .navigationTitle("Money")
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { ProfileMenu() } }
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .sensoryFeedback(.selection, trigger: segmentRaw)
         }

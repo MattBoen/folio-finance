@@ -3,6 +3,8 @@ import SwiftUI
 struct AccountsView: View {
     /// True when hosted inside the Money tab, which supplies the navigation stack and title.
     var embedded = false
+    /// False while a host keeps this screen alive but hidden, so its toolbar button steps aside.
+    var active = true
 
     @EnvironmentObject private var auth: AuthManager
     @State private var accounts: [Account] = []
@@ -78,7 +80,7 @@ struct AccountsView: View {
             }
             .titledUnlessEmbedded("Accounts", embedded: embedded)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                if active { ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Button { showAdd = true } label: { Label("Add account", systemImage: "plus") }
                         Button { showConnect = true } label: { Label("Connect a bank", systemImage: "link") }
@@ -86,7 +88,7 @@ struct AccountsView: View {
                     } label: {
                         Image(systemName: "plus")
                     }
-                }
+                } }
             }
             .sheet(isPresented: $showAdd) { AddAccountSheet { Task { await load() } } }
             .sheet(isPresented: $showConnect) { PlaidLinkSheet() }

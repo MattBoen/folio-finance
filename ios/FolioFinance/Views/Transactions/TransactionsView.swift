@@ -3,6 +3,8 @@ import SwiftUI
 struct TransactionsView: View {
     /// True when hosted inside the Money tab, which supplies the navigation stack and title.
     var embedded = false
+    /// False while a host keeps this screen alive but hidden, so its search and toolbar step aside.
+    var active = true
 
     @EnvironmentObject private var auth: AuthManager
     @State private var transactions: [Transaction] = []
@@ -49,11 +51,13 @@ struct TransactionsView: View {
                 }
             }
             .titledUnlessEmbedded("Activity", embedded: embedded)
-            .searchable(text: $searchText, prompt: "Search transactions")
+            .modifier(OptionalSearch(enabled: active, text: $searchText))
             .refreshable { await load() }
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { showAdd = true } label: { Image(systemName: "plus") }
+                if active {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button { showAdd = true } label: { Image(systemName: "plus") }
+                    }
                 }
             }
             .sheet(isPresented: $showAdd) { AddTransactionSheet { Task { await load() } } }
@@ -146,6 +150,15 @@ struct TransactionsView: View {
         } catch {
             self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
+    }
+}
+
+/// Search field that can be switched off while the screen is hidden behind a sibling.
+private struct OptionalSearch: ViewModifier {
+    let enabled: Bool
+    @Binding var text: String
+    func body(content: Content) -> some View {
+        if enabled { content.searchable(text: $text, prompt: "Search transactions") } else { content }
     }
 }
 
