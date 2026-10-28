@@ -4,6 +4,7 @@ import { eq, and } from "drizzle-orm";
 import { db } from "../src/db/client.js";
 import { users, accounts, transactions, vehicles, plaidItems } from "../src/db/schema.js";
 import { applyChanges, describeChange } from "../src/services/ask-changes.js";
+import { confirmProposal, createProposal } from "../src/services/ask-store.js";
 
 let a = "", b = "";
 let carId = "", cashId = "", bankId = "", txId = "", otherAcct = "";
@@ -27,6 +28,11 @@ afterAll(async () => {
 });
 
 describe("ask changes", () => {
+  it("describes a car change, and says no to a non-car", async () => {
+    await expect(describeChange(a, { op: "update_vehicle", accountId: carId, value: 38000, annualMiles: 9000 })).resolves.toMatch(/Vehicle.*\$38,000.*9,000 miles a year/);
+    await expect(describeChange(a, { op: "update_vehicle", accountId: cashId, value: 1 })).rejects.toThrow(/isn't a car/);
+  });
+
   it("applies a mixed batch: car value and yearly miles, rename, exclude", async () => {
     const n = await applyChanges(a, [
       { op: "update_vehicle", accountId: carId, value: 38000, annualMiles: 9000 },
@@ -85,5 +91,26 @@ describe("ask changes", () => {
     ])).rejects.toThrow();
     const [cash] = await db.select().from(accounts).where(eq(accounts.id, cashId));
     expect(cash.name).toBe("Cash");
+  });
+
+  it("confirms a stored proposal exactly once", async () => {
+    const id = await createProposal(a, { kind: "changes", title: "t", detail: "d", category: "", currentAmount: 0, newAmount: 0, ops: [
+      { op: "update_vehicle", accountId: carId, value: 41000 },
+      { op: "set_transactions_excluded", transactionIds: [txId], excluded: false },
+    ] });
+    const first = await confirmProposal(a, id);
+    expect(first).toMatchObject({ ok: true });
+    const [acct] = await db.select().from(accounts).where(eq(accounts.id, carId));
+    expect(parseFloat(acct.balanceCurrent!)).toBe(41000);
+    expect(await confirmProposal(a, id)).toMatchObject({ ok: false, status: 409 });
+    expect(await confirmProposal(b, id)).toMatchObject({ ok: false, status: 404 });
+  });
+
+  it("gives the proposal back when a change can't be made", async () => {
+    const id = await createProposal(a, { kind: "changes", title: "t", detail: "d", category: "", currentAmount: 0, newAmount: 0, ops: [
+      { op: "update_account", accountId: bankId, balance: 5 },
+    ] });
+    const r = await confirmProposal(a, id);
+    expect(r).toMatchObject({ ok: false, status: 409 });
   });
 });

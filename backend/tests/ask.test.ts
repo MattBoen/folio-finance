@@ -41,29 +41,39 @@ const run = (client: AskClient, data = fakeData(), messages = [{ role: "user" as
 
 describe("ask engine: changes", () => {
   const ACCT = "33333333-3333-4333-8333-333333333333";
-  it("proposes a batch of edits without applying anything, and tells the model to use dollars", async () => {
+  const TX = "55555555-5555-4555-8555-555555555555";
+  it("bundles several queued edits into one Confirm card and applies nothing itself", async () => {
     let saved: any;
     const { client, calls } = scripted([
-      toolUse("t1", "propose_changes", { changes: [{ op: "update_vehicle", accountId: ACCT, value: 38000, annualMiles: 9000 }, { op: "update_account", accountId: ACCT, name: "Bronco Fund" }], summary: "Update your Bronco" }),
-      text("I can set the Bronco to $38,000. Tap Confirm below."),
+      { stop_reason: "tool_use", content: [
+        { type: "tool_use", id: "t1", name: "change_car", input: { accountId: ACCT, value: 38000, milesPerYear: 9000 } },
+        { type: "tool_use", id: "t2", name: "exclude_transactions", input: { transactionIds: [TX], excluded: true } },
+      ] },
+      text("I'll set the Bronco to $38,000 and exclude that charge. Tap Confirm below."),
     ]);
-    const out = await run(client, fakeData({ createProposal: async (_u, p) => { saved = p; return "44444444-4444-4444-8444-444444444444"; } }));
+    const out = await run(client, fakeData({ describeChanges: async (_u, ops) => ops.map((o) => `did ${o.op}`), createProposal: async (_u, p) => { saved = p; return "44444444-4444-4444-8444-444444444444"; } }));
     expect(saved.kind).toBe("changes");
-    expect(saved.ops).toHaveLength(2);
-    expect(out.proposal).toMatchObject({ kind: "changes", title: "Update your Bronco" });
+    expect(saved.ops).toEqual([
+      expect.objectContaining({ op: "update_vehicle", accountId: ACCT, value: 38000, annualMiles: 9000 }),
+      expect.objectContaining({ op: "set_transactions_excluded", transactionIds: [TX], excluded: true }),
+    ]);
+    expect(out.proposal).toMatchObject({ kind: "changes", title: "Make these 2 changes" });
     expect((out.proposal as any).ops).toBeUndefined();
+    expect(out.proposal!.detail).toContain("did update_vehicle");
     expect(calls[0].system).toMatch(/US dollars/);
   });
 
-  it("rejects a change with a made-up id instead of proposing it", async () => {
-    const { client, calls } = scripted([toolUse("t1", "propose_changes", { changes: [{ op: "delete_account", accountId: "not-an-id" }] }), text("Which account?")]);
+  it("tells the model when an id is bad so it can fix the call, and makes no card", async () => {
+    const { client, calls } = scripted([toolUse("t1", "change_account", { accountId: "nope", name: "X" }), text("Which account?")]);
     const out = await run(client);
     expect(out.proposal).toBeNull();
-    expect(calls[1].messages.at(-1).content[0].is_error).toBe(true);
+    const tr = calls[1].messages.at(-1).content[0];
+    expect(tr.is_error).toBe(true);
+    expect(tr.content).toMatch(/accountId/);
   });
 
-  it("surfaces a refusal from the checks (for example a bank-fed balance)", async () => {
-    const { client, calls } = scripted([toolUse("t1", "propose_changes", { changes: [{ op: "update_account", accountId: ACCT, balance: 5 }] }), text("That one updates by itself.")]);
+  it("surfaces a refusal from the checks (for example a bank-fed balance) and makes no card", async () => {
+    const { client, calls } = scripted([toolUse("t1", "change_account", { accountId: ACCT, balance: 5 }), text("That one updates by itself.")]);
     const out = await run(client, fakeData({ describeChanges: async () => { throw new Error("Checking is connected to a bank, so its balance updates by itself."); } }));
     expect(out.proposal).toBeNull();
     expect(calls[1].messages.at(-1).content[0].content).toMatch(/connected to a bank/);
@@ -151,7 +161,7 @@ describe("ask engine", () => {
 
   it("publishes JSON-schema tools the API accepts", () => {
     const schemas = toolSchemas();
-    expect(schemas.map((s) => s.name)).toEqual(["get_overview", "get_accounts", "get_budget", "get_spending", "get_income", "get_health_metrics", "get_investments", "compare_to_sp500", "get_vehicles", "find_transactions", "propose_changes", "propose_budget_change", "propose_budget_plan"]);
+    expect(schemas.map((s) => s.name)).toEqual(["get_overview", "get_accounts", "get_budget", "get_spending", "get_income", "get_health_metrics", "get_investments", "compare_to_sp500", "get_vehicles", "find_transactions", "change_account", "delete_account", "change_car", "exclude_transactions", "edit_transaction", "add_transaction", "add_account", "set_monthly_income", "propose_budget_change", "propose_budget_plan"]);
     for (const s of schemas) { expect(s.input_schema.type).toBe("object"); expect(s.description.length).toBeGreaterThan(10); }
     expect(schemas.find((s) => s.name === "propose_budget_change")!.input_schema).toMatchObject({ required: ["category", "newAmount"] });
   });

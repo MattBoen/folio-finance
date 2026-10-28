@@ -30,11 +30,12 @@ const usd = (n: number) => "$" + Math.abs(n).toLocaleString("en-US", { minimumFr
 
 async function ownAccount(userId: string, accountId: string) {
   const [a] = await db
-    .select({ id: accounts.id, name: accounts.name, type: accounts.type, plaidItemId: accounts.plaidItemId, balance: accounts.balanceCurrent, isVehicle: sql<boolean>`exists (select 1 from vehicles v where v.account_id = ${accounts.id})` })
+    .select({ id: accounts.id, name: accounts.name, type: accounts.type, plaidItemId: accounts.plaidItemId, balance: accounts.balanceCurrent })
     .from(accounts)
     .where(and(eq(accounts.id, accountId), eq(accounts.userId, userId), isNull(accounts.deletedAt)));
   if (!a) throw new Error("That account wasn't found.");
-  return a;
+  const [car] = await db.select({ id: vehicles.id }).from(vehicles).where(and(eq(vehicles.accountId, accountId), eq(vehicles.userId, userId)));
+  return { ...a, isVehicle: car != null };
 }
 
 async function ownTransactions(userId: string, ids: string[]) {

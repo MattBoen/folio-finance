@@ -146,7 +146,8 @@ router.get("/:accountId", requireAuth, async (c) => {
   const now = new Date();
   return c.json({
     year: v.year, make: v.make, model: v.model, trim: v.trim, miles: v.miles, annualMiles: v.annualMiles,
-    currentMiles: projectedMiles(v.miles, v.annualMiles, v.valuedAt, now),
+    averageAnnualMiles: annualMiles(v.miles, ageYears(v.year, now)),
+    currentMiles: projectedMiles(v.miles, v.annualMiles ?? annualMiles(v.miles, ageYears(v.year, now)), v.valuedAt, now),
     valuedAt: v.valuedAt, valueIsManual: v.source === "manual", hasVin: v.vin.length > 0,
   });
 });

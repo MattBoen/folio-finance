@@ -221,7 +221,7 @@ enum DemoData {
             return try decoder.decode(T.self, from: data)
         }
         if endpoint.path.hasPrefix("/vehicles/"), endpoint.method == "GET", !endpoint.path.contains("trims") {
-            return try decodeDemo(["year": 2023, "make": "Ford", "model": "Bronco", "trim": "Big Bend", "miles": 41200, "annualMiles": 10800, "currentMiles": 41200, "valueIsManual": false] as [String: Any])
+            return try decodeDemo(["year": 2023, "make": "Ford", "model": "Bronco", "trim": "Big Bend", "miles": 41200, "annualMiles": 10800, "averageAnnualMiles": 10800, "currentMiles": 41200, "valueIsManual": false] as [String: Any])
         }
         if endpoint.path == "/ask" {
             return try decodeDemo(askResponse(for: endpoint))

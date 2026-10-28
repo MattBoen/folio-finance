@@ -2,11 +2,11 @@
 import { and, eq, isNull, lt } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { accounts, vehicles } from "../db/schema.js";
-import { estimateManual, projectedMiles } from "./vehicles.js";
+import { ageYears, annualMiles, estimateManual, projectedMiles } from "./vehicles.js";
 
 const STALE_DAYS = 30;
 
-/** Re-estimates this customer's cars whose value came from an estimate (not typed in) and has gone stale. Returns true if any changed. */
+/** Re-estimates this customer's cars whose value came from an estimate (not typed in) and has gone stale, using their yearly miles or the car's lifetime average. Returns true if any changed. */
 export async function refreshVehicleValues(userId: string, now: Date = new Date()): Promise<boolean> {
   const cutoff = new Date(now.getTime() - STALE_DAYS * 86_400_000);
   const rows = await db
@@ -20,8 +20,10 @@ export async function refreshVehicleValues(userId: string, now: Date = new Date(
 
   let changed = false;
   for (const v of rows) {
-    if (!v.annualMiles || v.source === "manual") continue;
-    const miles = projectedMiles(v.miles, v.annualMiles, v.valuedAt, now);
+    if (v.source === "manual") continue;
+    // No yearly miles set: assume the car keeps being driven at its lifetime average.
+    const perYear = v.annualMiles ?? annualMiles(v.miles, ageYears(v.year, now));
+    const miles = projectedMiles(v.miles, perYear, v.valuedAt, now);
     const est = estimateManual({ year: v.year, make: v.make, model: v.model, trim: v.trim, miles }, now);
     await db.update(vehicles).set({ miles, valuedAt: now }).where(eq(vehicles.id, v.id));
     await db.update(accounts).set({ balanceCurrent: est.estimatedValue.toFixed(2), updatedAt: now }).where(eq(accounts.id, v.accountId));

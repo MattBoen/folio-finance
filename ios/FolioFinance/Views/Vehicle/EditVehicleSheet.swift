@@ -21,6 +21,7 @@ private struct VehicleDetails: Decodable {
     let trim: String?
     let miles: Int
     let annualMiles: Int?
+    let averageAnnualMiles: Int
     let currentMiles: Int
     let valueIsManual: Bool
 }
@@ -78,9 +79,9 @@ struct EditVehicleSheet: View {
 
                 Section {
                     HStack { Text("Odometer"); Spacer(); TextField("Miles", text: $milesText).keyboardType(.numberPad).multilineTextAlignment(.trailing).frame(maxWidth: 140) }
-                    HStack { Text("Miles you drive per year"); Spacer(); TextField("Optional", text: $annualText).keyboardType(.numberPad).multilineTextAlignment(.trailing).frame(maxWidth: 120) }
+                    HStack { Text("Miles you drive per year"); Spacer(); TextField(details.map { "≈ \($0.averageAnnualMiles.formatted())" } ?? "Optional", text: $annualText).keyboardType(.numberPad).multilineTextAlignment(.trailing).frame(maxWidth: 120) }
                 } header: { Text("Mileage") } footer: {
-                    Text("With yearly miles set, Folio keeps the estimated value current as the odometer climbs. A value you type yourself stays put until you ask for an estimate.")
+                    Text("Left blank, Folio figures it from the car's age and odometer. Either way it keeps the estimated value current as the odometer climbs. A value you type yourself stays put until you ask for an estimate.")
                 }
 
                 if let error { Section { Text(error).foregroundStyle(.red).font(.footnote) } }

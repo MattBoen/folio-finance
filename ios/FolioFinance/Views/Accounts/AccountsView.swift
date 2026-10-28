@@ -165,7 +165,7 @@ struct AccountsView: View {
     }
 
     @ViewBuilder private func menu(for a: Account) -> some View {
-        Button { editing = a } label: { Label(a.isManual ? "Edit" : "Rename", systemImage: "pencil") }
+        Button { editing = a } label: { Label("Edit", systemImage: "pencil") }
         Button { Task { await setHidden(a, !a.isHidden) } } label: {
             Label(a.isHidden ? "Show in net worth" : "Hide", systemImage: a.isHidden ? "eye" : "eye.slash")
         }
@@ -316,7 +316,12 @@ struct AccountsView: View {
 }
 
 extension Account: Hashable {
-    static func == (l: Account, r: Account) -> Bool { l.id == r.id && l.balanceCurrent == r.balanceCurrent }
+    // Every field counts, or SwiftUI thinks a renamed or edited account hasn't changed and keeps showing the old one.
+    static func == (l: Account, r: Account) -> Bool {
+        l.id == r.id && l.name == r.name && l.balanceCurrent == r.balanceCurrent && l.isHidden == r.isHidden
+            && l.institutionName == r.institutionName && l.officialName == r.officialName && l.subtype == r.subtype && l.type == r.type
+            && l.balanceLimit == r.balanceLimit && l.balanceAvailable == r.balanceAvailable && l.mask == r.mask
+    }
     func hash(into h: inout Hasher) { h.combine(id) }
 }
 
@@ -358,7 +363,7 @@ struct AccountGroupCard: View {
                     NavigationLink(value: a) { AccountRow(account: a) }
                         .buttonStyle(PressableRowStyle())
                         .contextMenu {
-                            Button { actions.edit(a) } label: { Label(a.isManual ? "Edit" : "Rename", systemImage: "pencil") }
+                            Button { actions.edit(a) } label: { Label("Edit", systemImage: "pencil") }
                             Button { actions.toggleHidden(a) } label: { Label("Hide", systemImage: "eye.slash") }
                             if a.isManual {
                                 Button(role: .destructive) { actions.delete(a) } label: { Label("Delete", systemImage: "trash") }
@@ -467,7 +472,7 @@ struct AccountTransactionsView: View {
         }
         .navigationTitle(title.isEmpty ? account.name : title)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button(account.isManual ? "Edit" : "Rename") { showEdit = true } } }
+        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Edit") { showEdit = true } } }
         .onReceive(NotificationCenter.default.publisher(for: .accountRemoved)) { n in
             if n.userInfo?["id"] as? String == account.id { dismissDetail() }
         }
@@ -690,7 +695,7 @@ struct EditAccountSheet: View {
             .confirmationDialog(account.isManual ? "Delete \(account.name)?" : "Hide \(account.name)?", isPresented: $confirmRemove, titleVisibility: .visible) {
                 Button(account.isManual ? "Delete" : "Hide", role: .destructive) { Task { await remove() } }
             }
-            .navigationTitle(account.isManual ? "Edit Account" : "Rename Account")
+            .navigationTitle("Edit Account")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }

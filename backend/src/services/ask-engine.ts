@@ -34,7 +34,7 @@ const pct = (x: number) => `${Math.round(x * 100)}%`;
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((s) => !Number.isNaN(Date.parse(s)), "not a real date");
 
-export interface ToolCtx { userId: string; today: string; data: AskData }
+export interface ToolCtx { userId: string; today: string; data: AskData; queued: { op: ChangeOp; line: string }[] }
 interface ToolOut { result: unknown; facts: Fact[]; proposal?: ProposalOut }
 
 interface ToolDef<S extends z.ZodType> {
@@ -51,6 +51,48 @@ const addMonths = (iso: string, m: number) => {
   d.setUTCMonth(d.getUTCMonth() + m);
   return d.toISOString().slice(0, 10);
 };
+
+const idField = z.string().regex(/^[0-9a-fA-F-]{32,40}$/, "use the id exactly as returned by the lookup tools");
+
+/** Queues one edit for the user to confirm. Nothing is applied here: the edits are bundled into a single card at the end of the answer. */
+function queueTool<S extends z.ZodObject<z.ZodRawShape>>(name: string, description: string, schema: S, toOp: (a: z.infer<S>) => ChangeOp) {
+  return tool({
+    name, description: description + " Queues the change for the user to confirm; nothing happens until they tap Confirm.", schema,
+    async run(a, ctx) {
+      const op = changeOp.parse(toOp(a));
+      const [line] = await ctx.data.describeChanges(ctx.userId, [op]);
+      ctx.queued.push({ op, line });
+      return { result: { status: "queued_for_confirmation", change: line }, facts: [] };
+    },
+  });
+}
+
+function changeTools() {
+  return [
+    queueTool("change_account", "Rename, set the balance of, or hide/show one account. Balance only works for accounts you add by hand (including physical assets), never for accounts fed by a bank. For a car's value use change_car.",
+      z.object({ accountId: idField, name: z.string().min(1).max(80).optional(), balance: z.number().min(0).optional(), hidden: z.boolean().optional() }),
+      (a) => ({ op: "update_account", ...a })),
+    queueTool("delete_account", "Delete one account the user added by hand. Bank-connected accounts can't be deleted, only hidden with change_account.",
+      z.object({ accountId: idField }), (a) => ({ op: "delete_account", ...a })),
+    queueTool("change_car", "Change a car: its value in dollars, odometer miles, miles driven per year, or ask for a fresh estimate from its details. Use the car's id from get_vehicles.",
+      z.object({ accountId: idField, value: z.number().min(0).optional(), odometerMiles: z.number().int().min(0).optional(), milesPerYear: z.number().int().min(0).optional(), reestimate: z.boolean().optional() }),
+      (a) => ({ op: "update_vehicle", accountId: a.accountId, value: a.value, miles: a.odometerMiles, annualMiles: a.milesPerYear, reestimate: a.reestimate })),
+    queueTool("exclude_transactions", "Exclude transactions from spending, or include them again. Use ids from find_transactions (up to 50).",
+      z.object({ transactionIds: z.array(idField).min(1).max(50), excluded: z.boolean().describe("true to exclude, false to include again") }),
+      (a) => ({ op: "set_transactions_excluded", ...a })),
+    queueTool("edit_transaction", "Rename a transaction, move it to another spending category, or set its note. Use an id from find_transactions.",
+      z.object({ transactionId: idField, name: z.string().min(1).max(100).optional(), category: z.string().min(1).max(60).optional(), note: z.string().max(500).optional() }),
+      (a) => ({ op: "edit_transaction", ...a })),
+    queueTool("add_transaction", "Add a transaction by hand to one of the user's accounts.",
+      z.object({ accountId: idField, kind: z.enum(["expense", "income"]), amount: z.number().positive(), date: isoDate, name: z.string().min(1).max(100), category: z.string().min(1).max(60).optional() }),
+      (a) => ({ op: "add_transaction", ...a })),
+    queueTool("add_account", "Add a new account by hand.",
+      z.object({ name: z.string().min(1).max(80), kind: z.enum(["checking", "savings", "credit_card", "loan", "investment", "physical_asset"]), balance: z.number().min(0) }),
+      (a) => ({ op: "create_account", ...a })),
+    queueTool("set_monthly_income", "Set the user's monthly income by hand. Use null to go back to the income Folio detects.",
+      z.object({ monthly: z.number().min(0).nullable() }), (a) => ({ op: "set_income", ...a })),
+  ];
+}
 
 export const TOOLS = [
   tool({
@@ -174,30 +216,7 @@ export const TOOLS = [
       return { result: r, facts: [{ label: "Transactions found", value: String(r.transactions.length) }] };
     },
   }),
-  tool({
-    name: "propose_changes",
-    description: "Propose edits for the user to confirm with one tap. Use it for anything they would otherwise do by hand: rename, hide or delete an account (delete only for accounts not fed by a bank), set a manual account's balance or a physical asset's or car's value, change a car's odometer or yearly miles or re-estimate its value, exclude or include transactions in spending, rename/recategorize/add a note to a transaction, add a manual transaction, add a new manual account, or set monthly income (null goes back to detected). Call get_accounts / get_vehicles / find_transactions first to get the real ids. Budgets use the budget tools instead. This does NOT change anything until the user taps Confirm.",
-    schema: z.object({ changes: z.array(changeOp).min(1).max(20), summary: z.string().max(120).optional() }),
-    async run(a, { userId, data }) {
-      const lines = await data.describeChanges(userId, a.changes);
-      const payload: ChangesProposal = {
-        kind: "changes",
-        title: a.summary?.trim() || (a.changes.length === 1 ? "Make this change" : `Make these ${a.changes.length} changes`),
-        detail: lines.map((l) => `• ${l}`).join("\n"),
-        category: "",
-        currentAmount: 0,
-        newAmount: 0,
-        ops: a.changes,
-      };
-      const id = await data.createProposal(userId, payload);
-      const { ops: _ops, ...shown } = payload;
-      return {
-        result: { status: "awaiting_user_confirmation", changes: lines },
-        facts: [{ label: "Proposed changes", value: String(lines.length) }],
-        proposal: { id, ...shown },
-      };
-    },
-  }),
+  ...changeTools(),
   tool({
     name: "propose_budget_change",
     description: "Propose changing the monthly budget for one spending category. This does NOT apply anything: the user must tap Confirm in the app. Use newAmount 0 to remove the category's budget.",
@@ -276,7 +295,8 @@ export function systemPrompt(today: string): string {
     "- Investing: give general information only, not personalized advice. Never tell the user to buy, sell, or hold a specific security.",
     "- For compare_to_sp500, always tell the user the comparison is rough and repeat the caveat in one short sentence.",
     "- All money is in US dollars. Always write amounts with the $ sign (for example $14,500). Never use pounds, euros or any other currency.",
-    "- You cannot change anything yourself, but you can propose changes. To change one budget category, call propose_budget_change. To build or redo a whole budget, call propose_budget_plan once with every category. For everything else the user would do by hand (accounts, balances, cars and their value or miles, physical assets, excluding transactions, renaming or recategorizing transactions, adding transactions or accounts, income), look up the real ids with get_accounts, get_vehicles or find_transactions and then call propose_changes once with all the changes. Never guess an id. Then tell the user a Confirm button is shown below your answer; nothing changes until they tap it.",
+    "- You cannot change anything yourself, but you can queue changes for the user to confirm. For one budget category use propose_budget_change; for a whole budget use propose_budget_plan. For everything else the user would do by hand, first look up real ids (get_accounts, get_vehicles, find_transactions), then call change_account, delete_account, change_car, exclude_transactions, edit_transaction, add_transaction, add_account or set_monthly_income, once per change. Never guess an id. If a queue tool returns an error, read it and fix the call or tell the user why it can't be done.",
+    "- After queuing changes, say briefly what you will change and that a Confirm button is shown below your answer; nothing changes until they tap it.",
     "- If asked something unrelated to the user's finances in this app, politely say you can only help with their Folio data.",
   ].join("\n");
 }
@@ -305,6 +325,21 @@ async function callModel(client: AskClient, params: Record<string, unknown>): Pr
   }
 }
 
+/** Turns everything the model queued into one Confirm card. */
+async function bundleQueued(ctx: ToolCtx): Promise<ProposalOut | null> {
+  if (ctx.queued.length === 0) return null;
+  const ops = ctx.queued.map((q) => q.op);
+  const payload: ChangesProposal = {
+    kind: "changes",
+    title: ops.length === 1 ? "Make this change" : `Make these ${ops.length} changes`,
+    detail: ctx.queued.map((q) => `• ${q.line}`).join("\n"),
+    category: "", currentAmount: 0, newAmount: 0, ops,
+  };
+  const id = await ctx.data.createProposal(ctx.userId, payload);
+  const { ops: _ops, ...shown } = payload;
+  return { id, ...shown };
+}
+
 export interface AskResult { answer: string; facts: Fact[]; proposal: ProposalOut | null; tools: string[]; rounds: number }
 
 export async function runAsk(opts: {
@@ -321,7 +356,7 @@ export async function runAsk(opts: {
   const facts = new Map<string, Fact>();
   const used: string[] = [];
   let proposal: ProposalOut | null = null;
-  const ctx: ToolCtx = { userId, today, data };
+  const ctx: ToolCtx = { userId, today, data, queued: [] };
 
   for (let round = 1; round <= MAX_ROUNDS; round++) {
     const res = await callModel(client, {
@@ -332,6 +367,7 @@ export async function runAsk(opts: {
     const toolUses = res.content.filter((b) => b.type === "tool_use");
     if (res.stop_reason !== "tool_use" || toolUses.length === 0) {
       const answer = res.content.filter((b) => b.type === "text").map((b) => b.text ?? "").join("\n").trim();
+      proposal = proposal ?? (await bundleQueued(ctx));
       return { answer: answer || "I couldn't come up with an answer to that. Try asking another way.", facts: [...facts.values()].slice(0, 8), proposal, tools: used, rounds: round };
     }
 
@@ -358,5 +394,6 @@ export async function runAsk(opts: {
     convo.push({ role: "user", content: results });
   }
 
+  proposal = proposal ?? (await bundleQueued(ctx));
   return { answer: "That took more steps than I can do in one go. Try a simpler question.", facts: [...facts.values()].slice(0, 8), proposal, tools: used, rounds: MAX_ROUNDS };
 }
