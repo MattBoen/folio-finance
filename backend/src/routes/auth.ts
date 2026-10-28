@@ -2,6 +2,9 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
+
+// bcrypt cost 10 is the standard minimum; 12 takes seconds on Render's small free CPU. Raise it when the server is upgraded.
+const BCRYPT_COST = Number(process.env.BCRYPT_COST ?? 10);
 import { eq, and, gt, isNull, isNotNull, lt, or } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { users, refreshTokens } from "../db/schema.js";
@@ -83,7 +86,7 @@ auth.post(
 
     if (existing) return c.json({ error: "Email already registered" }, 409);
 
-    const passwordHash = await bcrypt.hash(password, 12);
+    const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
     let user: { id: string; plan: string };
     try {
       [user] = await db
@@ -120,6 +123,11 @@ auth.post(
 
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) return c.json({ error: "Invalid credentials" }, 401);
+
+    // Older accounts were hashed at a heavier setting that is very slow on the small free server: move them to the lighter one.
+    if (bcrypt.getRounds(user.passwordHash) > BCRYPT_COST) {
+      await db.update(users).set({ passwordHash: await bcrypt.hash(password, BCRYPT_COST) }).where(eq(users.id, user.id));
+    }
 
     const tokens = await issueTokenPair(user.id, user.plan);
     return c.json(tokens);
