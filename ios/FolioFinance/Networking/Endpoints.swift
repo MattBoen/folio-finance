@@ -133,6 +133,11 @@ extension Endpoint {
         return .patch("/accounts/\(id)", body: Body(name: name, balance: balance, institutionName: institutionName))
     }
 
+    static func renameAccount(id: String, name: String) -> Endpoint {
+        struct Body: Encodable { let name: String }
+        return .patch("/accounts/\(id)", body: Body(name: name))
+    }
+
     static func deleteAccount(id: String) -> Endpoint { .delete("/accounts/\(id)") }
 
     /// Permanently deletes the signed-in customer and all of their data.
@@ -171,6 +176,12 @@ extension Endpoint {
     static func setTransactionExcluded(id: String, excluded: Bool) -> Endpoint {
         struct Body: Encodable { let isExcluded: Bool }
         return .patch("/transactions/\(id)", body: Body(isExcluded: excluded))
+    }
+
+    /// Only the fields that are passed change; an empty name or note clears it.
+    static func updateTransaction(id: String, userName: String?, note: String?, category: String?) -> Endpoint {
+        struct Body: Encodable { let userName: String?; let note: String?; let category: String? }
+        return .patch("/transactions/\(id)", body: Body(userName: userName, note: note, category: category))
     }
 
     static func deleteTransaction(id: String) -> Endpoint { .delete("/transactions/\(id)") }

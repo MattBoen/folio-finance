@@ -14,6 +14,8 @@ struct TransactionsView: View {
     @State private var searchText = ""
     @State private var showAdd = false
     @State private var detail: Transaction?
+    @State private var editing: Transaction?
+    @State private var deleting: Transaction?
 
     private var filtered: [Transaction] {
         guard !searchText.isEmpty else { return transactions }
@@ -64,6 +66,12 @@ struct TransactionsView: View {
             .sheet(item: $detail) { t in
                 TransactionDetailView(transaction: t, all: transactions) { Task { await load() } }
             }
+            .sheet(item: $editing) { t in
+                EditTransactionSheet(transaction: t) { Task { await load() } }
+            }
+            .confirmationDialog("Delete this transaction?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
+                Button("Delete", role: .destructive) { if let t = deleting { Task { await delete(t) } } }
+            } message: { Text("Connected accounts re-import their own transactions. To hide one from your spending instead, use Exclude.") }
     }
 
     /// Inline search, used when a host's pinned switch sits under the nav bar where the system field would go.
@@ -105,7 +113,8 @@ struct TransactionsView: View {
                                             Label(txn.isExcluded ? "Include in spending" : "Exclude from spending",
                                                   systemImage: txn.isExcluded ? "eye" : "eye.slash")
                                         }
-                                        Button(role: .destructive) { Task { await delete(txn) } } label: {
+                                        Button { editing = txn } label: { Label("Edit", systemImage: "pencil") }
+                                        Button(role: .destructive) { deleting = txn } label: {
                                             Label("Delete", systemImage: "trash")
                                         }
                                     }

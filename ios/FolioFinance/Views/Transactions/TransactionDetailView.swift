@@ -79,6 +79,7 @@ struct TransactionDetailView: View {
     @State private var busy = false
     @State private var message: String?
     @State private var confirmDelete = false
+    @State private var editing = false
     @State private var incomeRows: [Transaction] = []
 
     private var isIncome: Bool { !transaction.isDebit }
@@ -117,7 +118,13 @@ struct TransactionDetailView: View {
             }
             .navigationTitle("Transaction")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Edit") { editing = true } }
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            }
+            .sheet(isPresented: $editing) {
+                EditTransactionSheet(transaction: transaction) { onChanged(); dismiss() }
+            }
             .confirmationDialog("Delete this transaction?", isPresented: $confirmDelete, titleVisibility: .visible) {
                 Button("Delete", role: .destructive) { Task { await delete() } }
             } message: { Text("Connected accounts re-import their own transactions, so this only removes ones you added.") }
@@ -394,6 +401,11 @@ struct TransactionDetailView: View {
             }
             Card(padding: 0) {
                 VStack(spacing: 0) {
+                    Button { editing = true } label: {
+                        Label("Rename, recategorize or add a note", systemImage: "pencil")
+                            .frame(maxWidth: .infinity, alignment: .leading).padding(16)
+                    }
+                    Divider().padding(.leading, 16)
                     Button { Task { await toggleExcluded() } } label: {
                         Label(isExcluded ? "Include in spending" : "Exclude from spending", systemImage: isExcluded ? "eye" : "eye.slash")
                             .frame(maxWidth: .infinity, alignment: .leading).padding(16)
@@ -445,5 +457,85 @@ struct TransactionDetailView: View {
             message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
         busy = false
+    }
+}
+
+
+// MARK: - Edit sheet
+
+/// Rename a transaction, move it to another category, or add a note. The bank's own details stay untouched.
+struct EditTransactionSheet: View {
+    let transaction: Transaction
+    var onSaved: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var auth: AuthManager
+    @State private var name: String
+    @State private var category: String
+    @State private var note: String
+    @State private var saving = false
+    @State private var error: String?
+
+    init(transaction: Transaction, onSaved: @escaping () -> Void) {
+        self.transaction = transaction
+        self.onSaved = onSaved
+        _name = State(initialValue: transaction.displayName)
+        _category = State(initialValue: transaction.category)
+        _note = State(initialValue: transaction.note ?? "")
+    }
+
+    private var choices: [String] {
+        Categories.choices.contains(category) ? Categories.choices : [category] + Categories.choices
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Name") {
+                    TextField("Name", text: $name)
+                }
+                Section {
+                    Picker("Category", selection: $category) {
+                        ForEach(choices, id: \.self) { c in
+                            Label(c, systemImage: Categories.style(c).symbol).tag(c)
+                        }
+                    }
+                } footer: { Text("Budgets and spending charts use this category.") }
+                Section("Note") {
+                    TextField("Add a note", text: $note, axis: .vertical).lineLimit(1...4)
+                }
+                if let error { Section { Text(error).foregroundStyle(.red).font(.footnote) } }
+            }
+            .navigationTitle("Edit Transaction")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button { Task { await save() } } label: { if saving { ProgressView() } else { Text("Save").bold() } }
+                        .disabled(saving || name.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    private func save() async {
+        saving = true
+        error = nil
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        do {
+            let _: AnyDecodable = try await auth.withFreshToken(.updateTransaction(
+                id: transaction.id,
+                userName: trimmed == transaction.displayName ? nil : trimmed,
+                note: note == (transaction.note ?? "") ? nil : note,
+                category: category == transaction.category ? nil : category
+            ))
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            onSaved()
+            dismiss()
+        } catch {
+            self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+        saving = false
     }
 }

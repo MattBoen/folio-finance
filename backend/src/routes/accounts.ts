@@ -106,7 +106,10 @@ router.patch(
       .from(accounts)
       .where(and(eq(accounts.id, id), eq(accounts.userId, userId), isNull(accounts.deletedAt)));
     if (!acct) return c.json({ error: "Not found" }, 404);
-    if (acct.plaidItemId) return c.json({ error: "Connected accounts update automatically" }, 400);
+    // Connected accounts keep their balance from the bank, but can be renamed.
+    if (acct.plaidItemId && (body.balance !== undefined || body.institution_name !== undefined)) {
+      return c.json({ error: "Connected accounts update automatically" }, 400);
+    }
 
     const set: Record<string, unknown> = { updatedAt: new Date() };
     if (body.name !== undefined) set.name = body.name;

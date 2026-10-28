@@ -40,7 +40,7 @@ app.onError(errorHandler);
 
 // Only bind to a port when run directly, not when imported by tests
 if (process.env.NODE_ENV !== "test") {
-  const PORT = Number(process.env.PORT ?? 3000);
+  const PORT = Number(process.env.PORT ?? 4000); // 3000 belongs to the personal Financial Picture app on this Mac
   serve({ fetch: app.fetch, port: PORT }, () => {
     console.log(`Server running on port ${PORT}`);
   });

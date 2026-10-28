@@ -63,7 +63,7 @@ struct Transaction: Identifiable, Codable, Sendable, Hashable {
 
     var category: String { categoryName ?? (isDebit ? "Other" : "Income") }
 
-    var displayName: String { userName ?? merchantName ?? name }
+    var displayName: String { userName?.nilIfEmpty ?? merchantName ?? name }
 
     /// Stable key for "this merchant" across transactions.
     var merchantKey: String { displayName.trimmingCharacters(in: .whitespaces).lowercased() }

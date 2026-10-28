@@ -11,6 +11,8 @@ struct OnboardingFlow: View {
     @State private var showLink = false
     @State private var showManual = false
     @State private var autoOpenedLink = false
+    @State private var editing: Account?
+    @State private var removing: Account?
 
     var body: some View {
         ZStack {
@@ -21,7 +23,10 @@ struct OnboardingFlow: View {
                     switch step {
                     case .welcome: WelcomeStep(next: { go(.plaid) })
                     case .plaid: PlaidExplainerStep(connect: { go(.connect) }, skip: { go(.car) })
-                    case .connect: ConnectStep(accounts: accounts, link: { showLink = true }, manual: { showManual = true }, next: { go(.car) })
+                    case .connect:
+                        ConnectStep(accounts: accounts, link: { showLink = true }, manual: { showManual = true },
+                                    edit: { editing = $0 }, hide: { a in Task { await hide(a) } }, remove: { removing = $0 },
+                                    next: { go(.car) })
                     case .car: CarStep(next: { go(.plan) })
                     case .plan: PlanStep(finish: onFinish)
                     }
@@ -34,11 +39,19 @@ struct OnboardingFlow: View {
             PlaidLinkSheet(onLinked: { _ in Task { await loadAccounts() } })
         }
         .sheet(isPresented: $showManual) { AddAccountSheet { Task { await loadAccounts() } } }
+        .sheet(item: $editing) { a in EditAccountSheet(account: a) { Task { await loadAccounts() } } }
+        .confirmationDialog("Remove \(removing?.name ?? "account")?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }), titleVisibility: .visible) {
+            Button("Remove", role: .destructive) { if let a = removing { Task { await remove(a) } } }
+        } message: { Text("It's removed from your net worth. You can add it again any time.") }
         .task { await loadAccounts() }
     }
 
     private var header: some View {
         HStack(spacing: 6) {
+            if step != .welcome {
+                Button { goBack() } label: { Image(systemName: "chevron.left").font(.subheadline.weight(.semibold)) }
+                    .padding(.trailing, 4).transition(.opacity)
+            }
             ForEach(Step.allCases, id: \.rawValue) { s in
                 Capsule().fill(s.rawValue <= step.rawValue ? Color.accentColor : Color.secondary.opacity(0.25)).frame(height: 4)
             }
@@ -58,6 +71,26 @@ struct OnboardingFlow: View {
                 if step == .connect { showLink = true }
             }
         }
+    }
+
+    private func goBack() {
+        let prev: Step = switch step {
+        case .welcome, .plaid: .welcome
+        case .connect: .plaid
+        case .car: .connect
+        case .plan: .car
+        }
+        withAnimation(Motion.spring) { step = prev }
+    }
+
+    private func hide(_ a: Account) async {
+        let _: AnyDecodable? = try? await auth.withFreshToken(.setAccountHidden(id: a.id, hidden: true))
+        await loadAccounts()
+    }
+
+    private func remove(_ a: Account) async {
+        let _: AnyDecodable? = try? await auth.withFreshToken(.deleteAccount(id: a.id))
+        await loadAccounts()
     }
 
     private func loadAccounts() async {
@@ -174,19 +207,31 @@ private struct ConnectStep: View {
     let accounts: [Account]
     let link: () -> Void
     let manual: () -> Void
+    let edit: (Account) -> Void
+    let hide: (Account) -> Void
+    let remove: (Account) -> Void
     let next: () -> Void
 
     var body: some View {
         StepScaffold(
             title: accounts.isEmpty ? "Add your accounts" : "\(accounts.count) account\(accounts.count == 1 ? "" : "s") added",
-            subtitle: accounts.isEmpty ? "Link banks, cards and investments, or enter a balance by hand." : "Add more, or keep going. You can always change this later."
+            subtitle: accounts.isEmpty ? "Link banks, cards and investments, or enter a balance by hand." : "Tap an account to rename it. Touch and hold to remove it. Add more, or keep going."
         ) {
             VStack(spacing: 14) {
                 if !accounts.isEmpty {
                     Card(padding: 0) {
                         VStack(spacing: 0) {
                             ForEach(accounts) { a in
-                                AccountRow(account: a)
+                                Button { edit(a) } label: { AccountRow(account: a).contentShape(Rectangle()) }
+                                    .buttonStyle(PressableRowStyle())
+                                    .contextMenu {
+                                        Button { edit(a) } label: { Label(a.isManual ? "Edit" : "Rename", systemImage: "pencil") }
+                                        if a.isManual {
+                                            Button(role: .destructive) { remove(a) } label: { Label("Remove", systemImage: "trash") }
+                                        } else {
+                                            Button(role: .destructive) { hide(a) } label: { Label("Don't include", systemImage: "eye.slash") }
+                                        }
+                                    }
                                 if a.id != accounts.last?.id { Divider().padding(.leading, 62) }
                             }
                         }
@@ -257,7 +302,7 @@ private struct PlanStep: View {
     @State private var showIncome = false
     @State private var error: String?
 
-    private let stages = ["Finding your income", "Adding up your spending", "Drafting a budget"]
+    private let stages = ["Pulling in your transactions", "Finding your income", "Adding up your spending", "Drafting a budget"]
 
     var body: some View {
         StepScaffold(
@@ -342,10 +387,29 @@ private struct PlanStep: View {
     }
 
     private func run() async {
-        async let fetched: Insights? = try? await auth.withFreshToken(.insights)
-        for s in 1...stages.count { try? await Task.sleep(for: .milliseconds(650)); withAnimation { stage = s } }
+        async let fetched: Insights? = fetchInsights()
+        // The last step waits for the real answer, so the checklist never finishes before the work does.
+        for s in 1..<stages.count { try? await Task.sleep(for: .milliseconds(650)); withAnimation { stage = s } }
         insights = await fetched
+        withAnimation { stage = stages.count }
         if insights == nil { error = "Couldn't build your plan right now. You can find it later in the Budget tab." ; finish() }
+    }
+
+    /// A freshly linked bank needs a moment to hand over its history, so sync first and wait a little for it.
+    private func fetchInsights() async -> Insights? {
+        guard !auth.isDemo else { return try? await auth.withFreshToken(.insights) }
+        let banks: PlaidItemsResponse? = try? await auth.withFreshToken(.plaidItems)
+        let hasBanks = !(banks?.items.isEmpty ?? true)
+        if hasBanks { await BankSync.run(auth, force: true) }
+        var r: Insights? = try? await auth.withFreshToken(.insights)
+        var tries = 0
+        while hasBanks, let cur = r, cur.dataQuality.transactionCount == 0, tries < 4 {
+            try? await Task.sleep(for: .seconds(4))
+            if hasBanks { await BankSync.run(auth, force: true) }
+            r = try? await auth.withFreshToken(.insights)
+            tries += 1
+        }
+        return r
     }
 
     private func reload() async {

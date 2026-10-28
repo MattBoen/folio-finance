@@ -162,7 +162,7 @@ struct AccountsView: View {
     }
 
     @ViewBuilder private func menu(for a: Account) -> some View {
-        if a.isManual { Button { editing = a } label: { Label("Edit balance", systemImage: "pencil") } }
+        Button { editing = a } label: { Label(a.isManual ? "Edit" : "Rename", systemImage: "pencil") }
         Button { Task { await setHidden(a, !a.isHidden) } } label: {
             Label(a.isHidden ? "Show in net worth" : "Hide", systemImage: a.isHidden ? "eye" : "eye.slash")
         }
@@ -355,7 +355,7 @@ struct AccountGroupCard: View {
                     NavigationLink(value: a) { AccountRow(account: a) }
                         .buttonStyle(PressableRowStyle())
                         .contextMenu {
-                            if a.isManual { Button { actions.edit(a) } label: { Label("Edit balance", systemImage: "pencil") } }
+                            Button { actions.edit(a) } label: { Label(a.isManual ? "Edit" : "Rename", systemImage: "pencil") }
                             Button { actions.toggleHidden(a) } label: { Label("Hide", systemImage: "eye.slash") }
                             if a.isManual {
                                 Button(role: .destructive) { actions.delete(a) } label: { Label("Delete", systemImage: "trash") }
@@ -390,7 +390,7 @@ struct AccountRow: View {
     }
 }
 
-private extension String {
+extension String {
     var nilIfEmpty: String? { isEmpty ? nil : self }
 }
 
@@ -404,6 +404,9 @@ struct AccountTransactionsView: View {
     @State private var loaded = false
     @State private var error: String?
     @State private var searchText = ""
+    @State private var showEdit = false
+    @State private var detail: Transaction?
+    @State private var title = ""
 
     private var filtered: [Transaction] {
         guard !searchText.isEmpty else { return transactions }
@@ -444,18 +447,36 @@ struct AccountTransactionsView: View {
                 }
                 ForEach(grouped, id: \.key) { date, txns in
                     Section(dayHeader(date)) {
-                        ForEach(txns) { TransactionRow(transaction: $0).listRowBackground(Rectangle().fill(.regularMaterial)) }
+                        ForEach(txns) { t in
+                            Button { detail = t } label: { TransactionRow(transaction: t).contentShape(Rectangle()) }
+                                .buttonStyle(.plain)
+                                .listRowBackground(Rectangle().fill(.regularMaterial))
+                        }
                     }
                 }
             }
             .scrollContentBackground(.hidden)
             .overlay { if isLoading && !loaded { ProgressView().controlSize(.large) } }
         }
-        .navigationTitle(account.name)
+        .navigationTitle(title.isEmpty ? account.name : title)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button(account.isManual ? "Edit" : "Rename") { showEdit = true } } }
+        .sheet(isPresented: $showEdit) {
+            EditAccountSheet(account: account) { Task { await rename() } }
+        }
+        .sheet(item: $detail) { t in
+            TransactionDetailView(transaction: t, all: transactions) { Task { await load() } }
+        }
         .searchable(text: $searchText, prompt: "Search")
         .refreshable { await load() }
         .task { await load() }
+    }
+
+    /// Shows the new name right away after an edit.
+    private func rename() async {
+        if let r: AccountsResponse = try? await auth.withFreshToken(.accounts), let a = r.accounts.first(where: { $0.id == account.id }) {
+            title = a.name
+        }
     }
 
     private func load() async {
@@ -620,24 +641,28 @@ struct EditAccountSheet: View {
     }
 
     private var balance: Double? { Double(balanceText.replacingOccurrences(of: ",", with: "")) }
-    private var canSave: Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty && (balance ?? -1) >= 0 && !saving }
+    private var canSave: Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty && (!account.isManual || (balance ?? -1) >= 0) && !saving }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
                     TextField("Name", text: $name)
-                    TextField("Bank or institution (optional)", text: $institution)
+                    if account.isManual { TextField("Bank or institution (optional)", text: $institution) }
+                } footer: {
+                    if !account.isManual { Text("Your bank keeps the balance up to date. Renaming only changes how it looks in Folio.") }
                 }
-                Section(account.isLiability ? "Amount owed" : "Current balance") {
-                    HStack {
-                        Text("$").foregroundStyle(.secondary)
-                        TextField("0.00", text: $balanceText).keyboardType(.decimalPad)
+                if account.isManual {
+                    Section(account.isLiability ? "Amount owed" : "Current balance") {
+                        HStack {
+                            Text("$").foregroundStyle(.secondary)
+                            TextField("0.00", text: $balanceText).keyboardType(.decimalPad)
+                        }
                     }
                 }
                 if let error { Section { Text(error).foregroundStyle(.red).font(.footnote) } }
             }
-            .navigationTitle("Edit Account")
+            .navigationTitle(account.isManual ? "Edit Account" : "Rename Account")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
@@ -653,10 +678,16 @@ struct EditAccountSheet: View {
     }
 
     private func save() async {
-        guard let balance else { return }
         saving = true
         error = nil
         do {
+            if !account.isManual {
+                let _: AccountResponse = try await auth.withFreshToken(.renameAccount(id: account.id, name: name.trimmingCharacters(in: .whitespaces)))
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                onSaved(); dismiss(); saving = false
+                return
+            }
+            guard let balance else { saving = false; return }
             let _: AccountResponse = try await auth.withFreshToken(.updateAccount(
                 id: account.id, name: name.trimmingCharacters(in: .whitespaces), balance: balance,
                 institutionName: institution.trimmingCharacters(in: .whitespaces).nilIfEmpty
