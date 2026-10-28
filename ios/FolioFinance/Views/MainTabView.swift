@@ -33,10 +33,14 @@ struct MainTabView: View {
 /// Shows setup the first time a signed-in user has no accounts.
 struct RootView: View {
     @EnvironmentObject private var auth: AuthManager
+    @EnvironmentObject private var billing: BillingManager
     @State private var showSetup = false
 
     var body: some View {
         MainTabView()
+            .fullScreenCover(isPresented: Binding(get: { billing.locked && !showSetup }, set: { _ in })) {
+                PaywallGate()
+            }
             .fullScreenCover(isPresented: $showSetup) {
                 OnboardingFlow {
                     auth.markSetupSeen()

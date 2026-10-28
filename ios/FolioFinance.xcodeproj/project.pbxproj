@@ -10,8 +10,10 @@
 		14BDA2F1FF89026E7568305C /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 58258D68C3BF9B6BF5F45995 /* Foundation.framework */; };
 		20BAC7B40D595591BCDAAEA7 /* FolioWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41E774D9A553AA31181E7193 /* FolioWidgets.swift */; };
 		32B0BE3F0831ED0599E3D393 /* WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 803263EA63F9DF978A85041C /* WidgetSnapshot.swift */; };
+		37AE682E03B5017F5D1EE300 /* PaywallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 680920E13CA4AC98D2B5AF15 /* PaywallView.swift */; };
 		3BA7E5F77B8043A3E8AACE12 /* FolioWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E186547C3473C27CA4F71538 /* FolioWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		65BB346EAF6A169CC41F67A6 /* Motion.swift in Sources */ = {isa = PBXBuildFile; fileRef = E321F9B99F432A14479E3FF0 /* Motion.swift */; };
+		8660647869185EB6CB5D0027 /* BillingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D298E2582E3D6DDF81C2110A /* BillingManager.swift */; };
 		992D2A2A6B5789DA3116E58B /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 638AD0F354906F476427E6AC /* SettingsView.swift */; };
 		A1CB8BD672669AFC2B600B15 /* WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 803263EA63F9DF978A85041C /* WidgetSnapshot.swift */; };
 		AA0000000000000000000020 /* FolioFinanceApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000010 /* FolioFinanceApp.swift */; };
@@ -76,6 +78,7 @@
 		41E774D9A553AA31181E7193 /* FolioWidgets.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FolioWidgets.swift; sourceTree = "<group>"; };
 		58258D68C3BF9B6BF5F45995 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		638AD0F354906F476427E6AC /* SettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		680920E13CA4AC98D2B5AF15 /* PaywallView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PaywallView.swift; sourceTree = "<group>"; };
 		803263EA63F9DF978A85041C /* WidgetSnapshot.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WidgetSnapshot.swift; sourceTree = "<group>"; };
 		87A5069034F52FF62A087482 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		91EBDF72A50B987F6D55A772 /* FolioFinance.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = FolioFinance.entitlements; sourceTree = "<group>"; };
@@ -112,6 +115,7 @@
 		AA000000000000000000011E /* SpendingHostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpendingHostView.swift; sourceTree = "<group>"; };
 		AA0000000000000000000121 /* InvestingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvestingView.swift; sourceTree = "<group>"; };
 		C330286129F2BC5A0C4C2ACA /* FolioWidgets.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = FolioWidgets.entitlements; sourceTree = "<group>"; };
+		D298E2582E3D6DDF81C2110A /* BillingManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BillingManager.swift; sourceTree = "<group>"; };
 		E186547C3473C27CA4F71538 /* FolioWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = FolioWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		E321F9B99F432A14479E3FF0 /* Motion.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Motion.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -265,6 +269,7 @@
 				AA000000000000000000003C /* Plaid */,
 				E321F9B99F432A14479E3FF0 /* Motion.swift */,
 				4E2A0775732F68BCB93C113D /* Settings */,
+				C786EA723E019294E6D5B58F /* Billing */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -384,6 +389,16 @@
 				AA0000000000000000000121 /* InvestingView.swift */,
 			);
 			path = Investing;
+			sourceTree = "<group>";
+		};
+		C786EA723E019294E6D5B58F /* Billing */ = {
+			isa = PBXGroup;
+			children = (
+				D298E2582E3D6DDF81C2110A /* BillingManager.swift */,
+				680920E13CA4AC98D2B5AF15 /* PaywallView.swift */,
+			);
+			name = Billing;
+			path = Billing;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -521,6 +536,8 @@
 				65BB346EAF6A169CC41F67A6 /* Motion.swift in Sources */,
 				992D2A2A6B5789DA3116E58B /* SettingsView.swift in Sources */,
 				D3F6146D191C97FA4CC6EE7D /* EditVehicleSheet.swift in Sources */,
+				8660647869185EB6CB5D0027 /* BillingManager.swift in Sources */,
+				37AE682E03B5017F5D1EE300 /* PaywallView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

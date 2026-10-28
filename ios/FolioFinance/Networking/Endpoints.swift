@@ -195,7 +195,7 @@ extension Endpoint {
     }
 }
 
-private struct EmptyBody: Encodable {}
+struct EmptyBody: Encodable {}
 
 // ── Plan: insights, budgets, income, vehicles ─────────────────────────────────
 

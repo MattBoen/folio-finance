@@ -34,6 +34,20 @@ services:
         value: "30"
       - key: ASK_MODEL
         value: claude-sonnet-5-5
+      - key: BILLING_ENFORCED
+        value: "false"
+      - key: BILLING_TRIAL_DAYS
+        value: "7"
+      - key: APP_URL
+        value: https://folio-finance-api.onrender.com
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PRICE_MONTHLY
+        sync: false
+      - key: STRIPE_PRICE_YEARLY
+        sync: false
       - key: ALLOWED_ORIGINS
         value: "*"
 

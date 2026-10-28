@@ -14,6 +14,7 @@ import { vehiclesRouter } from "./routes/vehicles.js";
 import { accountRouter } from "./routes/account.js";
 import { legal } from "./routes/legal.js";
 import { askRouter } from "./routes/ask.js";
+import { billingRouter } from "./routes/billing.js";
 import { errorHandler } from "./middleware/error-handler.js";
 
 const app = new Hono();
@@ -34,6 +35,7 @@ app.route("/settings", settingsRouter);
 app.route("/vehicles", vehiclesRouter);
 app.route("/account", accountRouter);
 app.route("/ask", askRouter);
+app.route("/billing", billingRouter);
 app.route("/", legal);
 
 app.onError(errorHandler);

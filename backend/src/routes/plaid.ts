@@ -6,6 +6,7 @@ import { createHash } from "node:crypto";
 import { decodeProtectedHeader, importJWK, jwtVerify } from "jose";
 import { db } from "../db/client.js";
 import { plaidItems, accounts } from "../db/schema.js";
+import { requireEntitled } from "../middleware/entitled.js";
 import { requireAuth } from "../middleware/auth.js";
 import { plaid } from "../services/plaid-client.js";
 import { encryptToken, decryptToken } from "../services/encryption.js";
@@ -60,7 +61,7 @@ export function webhookUrl(): string | undefined {
   return base ? `${base.replace(/\/$/, "")}/plaid/webhook` : undefined;
 }
 
-router.post("/link/token", requireAuth, async (c) => {
+router.post("/link/token", requireAuth, requireEntitled, async (c) => {
   const { userId } = c.get("auth");
   const body = (await c.req.json().catch(() => ({}))) as { item_id?: unknown };
   const webhook = webhookUrl();

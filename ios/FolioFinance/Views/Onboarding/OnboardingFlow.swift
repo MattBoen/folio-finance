@@ -3,9 +3,10 @@ import SwiftUI
 struct OnboardingFlow: View {
     var onFinish: () -> Void
 
-    enum Step: Int, CaseIterable { case welcome, plaid, connect, car, plan }
+    enum Step: Int, CaseIterable { case welcome, plaid, connect, car, plan, start }
 
     @EnvironmentObject private var auth: AuthManager
+    @EnvironmentObject private var billing: BillingManager
     @State private var step: Step = .welcome
     @State private var accounts: [Account] = []
     @State private var showLink = false
@@ -28,7 +29,10 @@ struct OnboardingFlow: View {
                                     edit: { editing = $0 }, hide: { a in Task { await hide(a) } }, remove: { removing = $0 },
                                     next: { go(.car) })
                     case .car: CarStep(next: { go(.plan) })
-                    case .plan: PlanStep(finish: onFinish)
+                    case .plan: PlanStep(finish: afterPlan)
+                    case .start:
+                        PaywallContent(onSkip: billing.locked ? nil : onFinish)
+                            .onChange(of: billing.status?.entitled) { _, ok in if ok == true { onFinish() } }
                     }
                 }
                 .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .move(edge: .leading).combined(with: .opacity)))
@@ -52,7 +56,7 @@ struct OnboardingFlow: View {
                 Button { goBack() } label: { Image(systemName: "chevron.left").font(.subheadline.weight(.semibold)) }
                     .padding(.trailing, 4).transition(.opacity)
             }
-            ForEach(Step.allCases, id: \.rawValue) { s in
+            ForEach(steps, id: \.rawValue) { s in
                 Capsule().fill(s.rawValue <= step.rawValue ? Color.accentColor : Color.secondary.opacity(0.25)).frame(height: 4)
             }
             Button("Skip") { onFinish() }
@@ -73,12 +77,21 @@ struct OnboardingFlow: View {
         }
     }
 
+    /// The subscribe step only appears when billing is switched on and the customer hasn't subscribed yet.
+    private var steps: [Step] { Step.allCases.filter { $0 != .start || needsPaywall } }
+    private var needsPaywall: Bool { billing.status.map { $0.enforced && !$0.entitled } ?? false }
+
+    private func afterPlan() {
+        if needsPaywall { go(.start) } else { onFinish() }
+    }
+
     private func goBack() {
         let prev: Step = switch step {
         case .welcome, .plaid: .welcome
         case .connect: .plaid
         case .car: .connect
         case .plan: .car
+        case .start: .plan
         }
         withAnimation(Motion.spring) { step = prev }
     }

@@ -50,7 +50,7 @@ footer{margin-top:40px;color:var(--muted);font-size:13px}
 <p><b>We do not sell your personal information, and we do not share it for advertising or use it to build advertising profiles.</b></p>
 <h2>4. Who we share information with</h2>
 <p>We share information only with service providers that help us run Folio, and only as needed for that purpose:</p>
-<div class="tw"><table><thead><tr><th>Provider</th><th>Why</th><th>What they receive</th></tr></thead><tbody><tr><td>Plaid Inc.</td><td>Connects your accounts and retrieves the data you authorize</td><td>Your connection choices and credentials entered on Plaid's screens; we receive the data you authorize. Plaid's handling is described in its <a href="https://plaid.com/legal/#end-user-privacy-policy">End User Privacy Policy</a>.</td></tr><tr><td>Hosting provider (Render)</td><td>Runs our servers and database in the United States</td><td>The data we store, encrypted in transit and at rest</td></tr><tr><td>Vehicle data services</td><td>Identify your vehicle from its VIN and estimate its value</td><td>VIN and mileage only, not your name or account data</td></tr><tr><td>Anthropic, PBC (only if you turn on Ask Folio)</td><td>Writes the answer to a question you ask in Ask Folio</td><td>Your question and only the specific figures needed to answer it (for example balances, budget amounts, spending totals, merchant names and dates, investment totals). Not sent: your name, email, bank credentials, Plaid tokens, or account numbers. Under Anthropic's commercial API terms, inputs are not used to train its models by default.</td></tr><tr><td>Apple</td><td>App distribution and the iOS Passwords app if you choose to save your login</td><td>App installation data under Apple's terms; no financial data</td></tr></tbody></table></div>
+<div class="tw"><table><thead><tr><th>Provider</th><th>Why</th><th>What they receive</th></tr></thead><tbody><tr><td>Plaid Inc.</td><td>Connects your accounts and retrieves the data you authorize</td><td>Your connection choices and credentials entered on Plaid's screens; we receive the data you authorize. Plaid's handling is described in its <a href="https://plaid.com/legal/#end-user-privacy-policy">End User Privacy Policy</a>.</td></tr><tr><td>Hosting provider (Render)</td><td>Runs our servers and database in the United States</td><td>The data we store, encrypted in transit and at rest</td></tr><tr><td>Vehicle data services</td><td>Identify your vehicle from its VIN and estimate its value</td><td>VIN and mileage only, not your name or account data</td></tr><tr><td>Anthropic, PBC (only if you turn on Ask Folio)</td><td>Writes the answer to a question you ask in Ask Folio</td><td>Your question and only the specific figures needed to answer it (for example balances, budget amounts, spending totals, merchant names and dates, investment totals). Not sent: your name, email, bank credentials, Plaid tokens, or account numbers. Under Anthropic's commercial API terms, inputs are not used to train its models by default.</td></tr><tr><td>Stripe, Inc.</td><td>Processes subscription payments on its own secure checkout page</td><td>Your email address and the payment details you enter on Stripe's page. We never see or store your card number; we receive only your subscription status.</td></tr><tr><td>Apple</td><td>App distribution and the iOS Passwords app if you choose to save your login</td><td>App installation data under Apple's terms; no financial data</td></tr></tbody></table></div>
 <p>We may also disclose information if required by law or to protect rights, safety, or security, or as part of a merger or sale of the business (in which case we will tell you and this policy will continue to protect your data).</p>
 <h2>5. Your consent and Plaid</h2>
 <p>We ask for your permission before connecting any financial account. During setup you see a screen explaining what Folio and Plaid will access, and you must tap <b>Agree and continue</b>. Plaid then shows its own consent screen where you choose the accounts to share.</p>
@@ -81,6 +81,48 @@ footer{margin-top:40px;color:var(--muted);font-size:13px}
 </body>
 </html>
 `;
+
+// Terms of use, sharing the privacy page's look.
+const termsStyle = privacyHtml.slice(privacyHtml.indexOf("<style>"), privacyHtml.indexOf("</style>") + 8);
+const termsHtml = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Folio Terms of Use</title>
+${termsStyle}
+</head>
+<body>
+<main>
+<header><div class="brand">FOLIO</div><h1>Terms of Use</h1><p class="sub">Last updated October 28, 2026</p></header>
+<h2>Using Folio</h2>
+<p>Folio helps you see and understand your own money. By using it you agree to these terms and to our <a href="/privacy">Privacy Policy</a>. You must be at least 18 and use Folio only for your own finances.</p>
+<h2>Not financial advice</h2>
+<p>Folio, including Ask Folio, gives general information based on your data. It is not financial, tax, legal or investment advice, and it can be wrong. Check important numbers and decide for yourself.</p>
+<h2>Subscription and billing</h2>
+<ul>
+<li>Folio costs $10.49 a month or $74.99 a year. Prices are in US dollars. A free trial may be offered when you first subscribe.</li>
+<li>Payment is handled by Stripe on its own checkout page. Your subscription renews automatically each month or year at the price you chose until you cancel.</li>
+<li>If there is a free trial, you will not be charged until it ends, and you can cancel before then at no cost.</li>
+<li>You can change your card, switch plans or cancel any time from <b>Settings, then Manage subscription</b> in the app. Cancelling stops the next renewal; you keep access until the end of the period you already paid for.</li>
+<li>Payments already made are not refunded except where the law requires it. Questions about a charge: <a href="mailto:folio.finance.app@gmail.com">folio.finance.app@gmail.com</a>.</li>
+</ul>
+<h2>Your data and accounts</h2>
+<p>You choose which accounts to connect and can disconnect or delete your account and data at any time in the app. Bank connections are read-only and provided by Plaid.</p>
+<h2>Fair use and changes</h2>
+<p>Don't misuse Folio, try to break it, or use it to access anyone else's data. We may update these terms or the service; if a change is significant we will tell you in the app. Folio is provided as is, and to the extent the law allows we are not liable for losses from decisions you make using it.</p>
+<h2>Contact</h2>
+<p><a href="mailto:folio.finance.app@gmail.com">folio.finance.app@gmail.com</a></p>
+</main>
+</body>
+</html>
+`;
+
+legal.get("/terms", (c) => {
+  c.header("Cache-Control", "public, max-age=3600");
+  return c.html(termsHtml);
+});
 
 legal.get("/privacy", (c) => {
   c.header("Cache-Control", "public, max-age=3600");

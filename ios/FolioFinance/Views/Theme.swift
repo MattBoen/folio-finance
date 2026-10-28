@@ -207,6 +207,7 @@ struct ProfileMenu: View {
 
 enum AppLinks {
     static let privacy = URL(string: "https://folio-finance-api.onrender.com/privacy")!
+    static let terms = URL(string: "https://folio-finance-api.onrender.com/terms")!
     static let support = URL(string: "mailto:folio.finance.app@gmail.com")!
 }
 

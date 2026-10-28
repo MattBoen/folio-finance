@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { createHmac } from "node:crypto";
+import { requireEntitled } from "../middleware/entitled.js";
 import { requireAuth } from "../middleware/auth.js";
 import { rateLimit } from "../middleware/rate-limit.js";
 import { getAnthropic } from "../services/anthropic.js";
@@ -36,7 +37,7 @@ const body = z.object({
   messages: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().min(1).max(2000) })).min(1).max(100),
 });
 
-router.post("/", requireAuth, rateLimit({ max: 10, windowMs: 60_000 }), zValidator("json", body), async (c) => {
+router.post("/", requireAuth, requireEntitled, rateLimit({ max: 10, windowMs: 60_000 }), zValidator("json", body), async (c) => {
   const { userId } = c.get("auth");
   const messages = c.req.valid("json").messages.slice(-10);
   if (messages[messages.length - 1].role !== "user") return c.json({ error: "The last message must be from you." }, 400);

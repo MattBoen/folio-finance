@@ -6,7 +6,10 @@ struct SettingsView: View {
     @EnvironmentObject private var router: TabRouter
     @Environment(\.dismiss) private var dismiss
     @AppStorage("hideAmounts") private var hide = false
+    @EnvironmentObject private var billing: BillingManager
+    @Environment(\.openURL) private var openURL
     @ObservedObject private var ask = AskState.shared
+    @State private var billingError: String?
 
     @State private var accountCount = 0
     @State private var banks: [PlaidItem] = []
@@ -47,6 +50,21 @@ struct SettingsView: View {
                     infoRow("Connected banks", "\(banks.count)", symbol: "building.columns")
                     if let lastSync {
                         infoRow("Last bank sync", lastSync.formatted(.relative(presentation: .named)), symbol: "arrow.triangle.2.circlepath")
+                    }
+                }
+
+                if let b = billing.status, !auth.isDemo, b.configured || b.entitled {
+                    Section {
+                        infoRow("Plan", planText(b), symbol: "creditcard.and.123")
+                        if let end = b.currentPeriodEnd, b.status != "none" {
+                            infoRow(b.cancelAtPeriodEnd ? "Ends" : "Renews", end.formatted(date: .abbreviated, time: .omitted), symbol: "calendar")
+                        }
+                        Button { Task { await manageBilling() } } label: {
+                            Label(b.status == "none" || b.status == "canceled" ? "Subscribe" : "Manage subscription", systemImage: "arrow.up.right.square")
+                        }
+                        if let billingError { Text(billingError).font(.footnote).foregroundStyle(.red) }
+                    } header: { Text("Subscription") } footer: {
+                        Text("Payments are handled securely by Stripe in your browser. Cancel any time.")
                     }
                 }
 
@@ -106,7 +124,7 @@ struct SettingsView: View {
             .confirmationDialog(auth.isDemo ? "Exit the demo?" : "Sign out of Folio?", isPresented: $confirmSignOut, titleVisibility: .visible) {
                 Button(auth.isDemo ? "Exit demo" : "Sign out", role: .destructive) { auth.logout() }
             }
-            .task { await load() }
+            .task { await load(); await billing.refresh(auth) }
         }
         .presentationDetents([.large])
     }
@@ -117,6 +135,25 @@ struct SettingsView: View {
             Spacer()
             Text(value).foregroundStyle(.secondary)
         }
+    }
+
+    private func planText(_ b: BillingStatus) -> String {
+        switch b.status {
+        case "trialing": return "Free trial"
+        case "active": return b.interval == "year" ? "Yearly" : b.interval == "month" ? "Monthly" : "Active"
+        case "past_due": return "Payment due"
+        case "canceled": return "Cancelled"
+        default: return b.entitled ? "Included" : "Not subscribed"
+        }
+    }
+
+    private func manageBilling() async {
+        billingError = nil
+        do {
+            let subscribed = billing.status.map { $0.status != "none" && $0.status != "canceled" } ?? false
+            let url = subscribed ? try await billing.portalURL(auth: auth) : try await billing.checkoutURL(interval: "year", auth: auth)
+            openURL(url)
+        } catch { billingError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription }
     }
 
     private func load() async {

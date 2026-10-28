@@ -304,3 +304,24 @@ export const transactionsRelations = relations(transactions, ({ one }) => ({
   category: one(categories, { fields: [transactions.categoryId], references: [categories.id] }),
   userCategory: one(categories, { fields: [transactions.userCategoryId], references: [categories.id] }),
 }));
+
+
+// ─── Subscriptions (Stripe) ──────────────────────────────────────────────────
+
+export const subscriptions = pgTable(
+  "subscriptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    stripeCustomerId: text("stripe_customer_id").notNull(),
+    stripeSubscriptionId: text("stripe_subscription_id"),
+    // Stripe's own status: trialing, active, past_due, canceled, unpaid, incomplete, ...
+    status: text("status").notNull().default("incomplete"),
+    interval: text("interval"),
+    currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+    trialEnd: timestamp("trial_end", { withTimezone: true }),
+    cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("subscriptions_user_idx").on(t.userId), uniqueIndex("subscriptions_customer_idx").on(t.stripeCustomerId)]
+);
