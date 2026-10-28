@@ -70,7 +70,11 @@ router.post("/", requireAuth, rateLimit({ max: 10, windowMs: 60_000 }), zValidat
   }
 });
 
-const proposalBody = z.object({ proposalId: z.string().uuid() });
+// The iPhone app sends snake_case keys (proposal_id); accept that and the camelCase spelling.
+const proposalBody = z
+  .object({ proposalId: z.string().uuid().optional(), proposal_id: z.string().uuid().optional() })
+  .refine((b) => b.proposalId || b.proposal_id, "proposalId is required")
+  .transform((b) => ({ proposalId: (b.proposalId ?? b.proposal_id) as string }));
 
 router.post("/confirm", requireAuth, rateLimit({ max: 20, windowMs: 60_000 }), zValidator("json", proposalBody), async (c) => {
   const { userId } = c.get("auth");

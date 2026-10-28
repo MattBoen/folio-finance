@@ -339,6 +339,8 @@ describe("POST /ask gating", () => {
 describe("proposals", () => {
   const mine = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
   it("confirm applies the user's own proposal", async () => {
+    // The iPhone app sends snake_case, so that spelling must work too.
+    expect((await post("/ask/confirm", { proposal_id: mine })).status).toBe(200);
     const res = await post("/ask/confirm", { proposalId: mine });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true, message: "Groceries budget set to $900." });
