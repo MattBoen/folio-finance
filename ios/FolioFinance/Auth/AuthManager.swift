@@ -37,20 +37,31 @@ final class AuthManager: ObservableObject {
     }
 
     func login(email: String, password: String) async {
+        let email = Self.normalized(email)
         await perform {
-            let response: AuthResponse = try await self.api.request(
-                .login(email: email, password: password)
-            )
-            self.store(response)
+            do {
+                let response: AuthResponse = try await self.api.request(.login(email: email, password: password))
+                // An existing account signing in (e.g. on a new phone) has already done setup.
+                UserDefaults.standard.set(true, forKey: "setupSeenV2")
+                self.store(response)
+            } catch APIError.unauthorized {
+                throw APIError.server(401, "That email and password don't match.")
+            }
         }
     }
 
+    private static func normalized(_ email: String) -> String {
+        email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
     func register(email: String, password: String) async {
-        UserDefaults.standard.set(false, forKey: "setupSeenV2")
+        let email = Self.normalized(email)
         await perform {
             let response: AuthResponse = try await self.api.request(
                 .register(email: email, password: password)
             )
+            // A brand-new account always gets the introduction.
+            UserDefaults.standard.set(false, forKey: "setupSeenV2")
             self.store(response)
         }
     }

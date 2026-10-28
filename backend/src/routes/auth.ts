@@ -17,13 +17,15 @@ import { rateLimit } from "../middleware/rate-limit.js";
 
 const auth = new Hono();
 
+const emailField = z.string().trim().toLowerCase().email();
+
 const registerSchema = z.object({
-  email: z.string().email(),
+  email: emailField,
   password: z.string().min(8).max(128),
 });
 
 const loginSchema = z.object({
-  email: z.string().email(),
+  email: emailField,
   password: z.string(),
 });
 
@@ -59,10 +61,17 @@ auth.post(
     if (existing) return c.json({ error: "Email already registered" }, 409);
 
     const passwordHash = await bcrypt.hash(password, 12);
-    const [user] = await db
-      .insert(users)
-      .values({ email, passwordHash })
-      .returning({ id: users.id, plan: users.plan });
+    let user: { id: string; plan: string };
+    try {
+      [user] = await db
+        .insert(users)
+        .values({ email, passwordHash })
+        .returning({ id: users.id, plan: users.plan });
+    } catch (err) {
+      // Two sign-ups racing on the same email: the unique index decides the winner.
+      if ((err as { code?: string }).code === "23505") return c.json({ error: "Email already registered" }, 409);
+      throw err;
+    }
 
     const tokens = await issueTokenPair(user.id, user.plan);
     return c.json(tokens, 201);
