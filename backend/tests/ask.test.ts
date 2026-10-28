@@ -98,9 +98,26 @@ describe("ask engine", () => {
     expect(propose.schema.safeParse({ category: "Dining", newAmount: 250 }).success).toBe(true);
   });
 
+  it("proposes a whole budget as one confirmable plan, skipping income and duplicates", async () => {
+    let saved: any = null;
+    const data = fakeData({ currentBudgetAmount: async (_u, c) => (c === "Groceries" ? 800 : 0), createProposal: async (_u, p) => { saved = p; return "22222222-2222-4222-8222-222222222222"; } });
+    const { client } = scripted([
+      toolUse("t1", "propose_budget_plan", { items: [{ category: "groceries", amount: 650.4 }, { category: "Dining", amount: 250 }, { category: "Groceries", amount: 999 }, { category: "Income", amount: 6000 }] }),
+      text("Here's a budget. Tap Confirm to apply it."),
+    ]);
+    const out = await run(client, data);
+    expect(out.proposal?.kind).toBe("budget_plan");
+    expect(saved.items).toEqual([
+      { category: "Groceries", currentAmount: 800, newAmount: 650 },
+      { category: "Dining", currentAmount: 0, newAmount: 250 },
+    ]);
+    expect(out.proposal?.newAmount).toBe(900);
+    expect(out.proposal?.detail).toContain("Total: $900");
+  });
+
   it("publishes JSON-schema tools the API accepts", () => {
     const schemas = toolSchemas();
-    expect(schemas.map((s) => s.name)).toEqual(["get_overview", "get_accounts", "get_budget", "get_spending", "get_income", "get_health_metrics", "get_investments", "compare_to_sp500", "propose_budget_change"]);
+    expect(schemas.map((s) => s.name)).toEqual(["get_overview", "get_accounts", "get_budget", "get_spending", "get_income", "get_health_metrics", "get_investments", "compare_to_sp500", "propose_budget_change", "propose_budget_plan"]);
     for (const s of schemas) { expect(s.input_schema.type).toBe("object"); expect(s.description.length).toBeGreaterThan(10); }
     expect(schemas.find((s) => s.name === "propose_budget_change")!.input_schema).toMatchObject({ required: ["category", "newAmount"] });
   });

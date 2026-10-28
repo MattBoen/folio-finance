@@ -5,6 +5,8 @@ struct PlaidItem: Identifiable, Codable, Sendable {
     let institutionName: String?
     let status: ItemStatus
     let createdAt: Date
+    let lastSyncedAt: Date?
+    let accountCount: Int?
 
     enum ItemStatus: String, Codable, Sendable {
         case active

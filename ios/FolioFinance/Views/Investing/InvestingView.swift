@@ -363,6 +363,8 @@ struct InvestingView: View {
     private var ideasSection: some View {
         VStack(spacing: 8) {
             SectionTitle("Ideas")
+            AskFolioButton(title: "Ask Folio how I'm doing vs the S&P 500", question: "How have my investments done compared with the S&P 500 this year?")
+                .frame(maxWidth: .infinity, alignment: .leading)
             if let notes = insights?.investing.notes, !notes.isEmpty {
                 Card(padding: 0) {
                     VStack(spacing: 0) {

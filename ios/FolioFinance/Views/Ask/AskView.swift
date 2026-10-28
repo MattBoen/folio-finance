@@ -8,6 +8,14 @@ final class AskState: ObservableObject {
     @Published var loaded = false
     @Published var dailyLimit: Int?
     @Published var usedToday: Int?
+    /// A question another screen asked us to send (the "Ask Folio" buttons around the app).
+    @Published var pending: String?
+
+    /// Opens the Ask tab and sends `question` there (after the user turns Ask on, if it's off).
+    func ask(_ question: String, router: TabRouter) {
+        pending = question
+        router.selected = .ask
+    }
 
     func load(auth: AuthManager) async {
         if auth.isDemo { loaded = true; return }
@@ -72,7 +80,15 @@ struct AskView: View {
                 ToolbarItem(placement: .topBarTrailing) { ProfileMenu() }
             }
         }
-        .task { await state.load(auth: auth) }
+        .task { await state.load(auth: auth); sendPending() }
+        .onChange(of: state.pending) { sendPending() }
+        .onChange(of: state.enabled) { sendPending() }
+    }
+
+    private func sendPending() {
+        guard state.enabled, let q = state.pending, !thinking else { return }
+        state.pending = nil
+        send(q)
     }
 
     // MARK: Opt-in
@@ -95,6 +111,15 @@ struct AskView: View {
                     Link("Read the Privacy Policy", destination: AppLinks.privacy).font(.subheadline.weight(.semibold))
                     Text("Ask is off until you turn it on, and you can turn it off any time from the profile menu.")
                         .font(.footnote).foregroundStyle(.secondary)
+                }
+            }
+            if let q = state.pending {
+                Card {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Your question").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                        Text(q).font(.subheadline)
+                        Text("Turn on Ask and it's sent right away.").font(.caption).foregroundStyle(.secondary)
+                    }
                 }
             }
             if let enableError { Text(enableError).font(.footnote).foregroundStyle(.red) }
@@ -202,10 +227,11 @@ struct AskView: View {
         messages[i].proposalState = .confirming
         Task {
             do {
-                let _: AnyDecodable = try await auth.withFreshToken(.confirmProposal(id: p.id))
+                let r: ConfirmResponse = try await auth.withFreshToken(.confirmProposal(id: p.id))
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
+                NotificationCenter.default.post(name: .budgetsChanged, object: nil)
                 if let j = messages.firstIndex(where: { $0.id == id }) {
-                    withAnimation(.smooth) { messages[j].proposalState = .confirmed(p.kind == "budget" ? "Budget updated." : "Done.") }
+                    withAnimation(.smooth) { messages[j].proposalState = .confirmed(r.message ?? "Budget updated.") }
                 }
             } catch {
                 if let j = messages.firstIndex(where: { $0.id == id }) {
@@ -223,6 +249,38 @@ struct AskView: View {
 }
 
 // MARK: - Pieces
+
+private struct ConfirmResponse: Decodable { let message: String? }
+
+extension Notification.Name {
+    /// Posted when budgets change somewhere other than the Budget screen (for example from Ask Folio).
+    static let budgetsChanged = Notification.Name("FolioBudgetsChanged")
+}
+
+/// A small button that hands a question to Ask Folio. Used on Budget, Spending and Investing.
+struct AskFolioButton: View {
+    let title: String
+    let question: String
+    var prominent = false
+    @EnvironmentObject private var router: TabRouter
+    @State private var tick = 0
+
+    var body: some View {
+        Button {
+            tick += 1
+            AskState.shared.ask(question, router: router)
+        } label: {
+            Label(title, systemImage: "sparkles")
+                .font(.subheadline.weight(.semibold))
+                .frame(maxWidth: prominent ? .infinity : nil)
+                .frame(height: prominent ? 30 : nil)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(prominent ? .large : .regular)
+        .tint(Color.heroBottom)
+        .sensoryFeedback(.selection, trigger: tick)
+    }
+}
 
 private struct MessageView: View {
     @Binding var message: AskMessage

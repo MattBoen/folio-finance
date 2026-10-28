@@ -30,7 +30,7 @@ interface TestUser {
 }
 
 async function createUser(suffix: string): Promise<TestUser> {
-  const email = `isolation-${suffix}-${Date.now()}@example.com`;
+  const email = `isolation-${suffix}-${Date.now()}@example.com`.toLowerCase(); // the API stores emails lowercased
   const res = await client.auth.register.$post({
     json: { email, password: "S3cure!Pass" },
   });

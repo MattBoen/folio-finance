@@ -118,9 +118,9 @@ extension View {
     /// Scroll-linked depth for cards, plus a staggered rise on first appearance when `index` is given.
     @ViewBuilder func flowIn(_ index: Int? = nil) -> some View {
         let scrolled = scrollTransition(.interactive) { c, phase in
-            c.opacity(1 - abs(phase.value) * 0.35)
-                .scaleEffect(1 - abs(phase.value) * 0.05)
-                .blur(radius: abs(phase.value) * 1.5)
+            // Gentle: tall cards stay partly off-screen while being read, so no blur and only a slight fade.
+            c.opacity(1 - abs(phase.value) * 0.18)
+                .scaleEffect(1 - abs(phase.value) * 0.03)
         }
         if let index { scrolled.modifier(Entrance(index: index)) } else { scrolled }
     }

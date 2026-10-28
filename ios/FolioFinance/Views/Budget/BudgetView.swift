@@ -84,6 +84,8 @@ struct SpendingView: View {
                         } else if !expenses.isEmpty {
                             TileButton { sheet = .spent } content: { donutCard }.flowIn(0)
                             statsCard.flowIn(1)
+                            AskFolioButton(title: "Ask Folio where my money went", question: "Where is my money going this month compared with usual, and where could I realistically cut back?")
+                                .frame(maxWidth: .infinity, alignment: .leading)
                             categoriesCard
                         }
                     }

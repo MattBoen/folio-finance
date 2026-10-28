@@ -69,21 +69,35 @@ extension Endpoint {
         .post("/plaid/link/token", body: EmptyBody())
     }
 
+    /// A link token for signing back in to a bank that stopped syncing (Plaid "update mode").
+    static func reconnectLinkToken(itemId: String) -> Endpoint {
+        struct Body: Encodable { let itemId: String }
+        return .post("/plaid/link/token", body: Body(itemId: itemId))
+    }
+
     static func exchangeToken(
         publicToken: String,
         institutionId: String?,
-        institutionName: String?
+        institutionName: String?,
+        accountIds: [String]? = nil
     ) -> Endpoint {
         struct Body: Encodable {
             let publicToken: String
             let institutionId: String?
             let institutionName: String?
+            let accountIds: [String]?
         }
         return .post("/plaid/exchange", body: Body(
             publicToken: publicToken,
             institutionId: institutionId,
-            institutionName: institutionName
+            institutionName: institutionName,
+            accountIds: accountIds
         ))
+    }
+
+    /// Pulls new balances and transactions from every connected bank (skips ones synced in the last few minutes).
+    static func syncBanks(force: Bool = false) -> Endpoint {
+        .post(force ? "/plaid/sync?force=1" : "/plaid/sync", body: EmptyBody())
     }
 
     static var plaidItems: Endpoint { .get("/plaid/items") }

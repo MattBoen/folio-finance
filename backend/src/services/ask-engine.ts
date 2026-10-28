@@ -3,11 +3,11 @@
 import { z } from "zod";
 import { NON_SPENDING, normalizeCategory } from "./categories.js";
 import { SP500_AS_OF, SP500_CAVEAT, sp500ReturnBetween } from "./sp500.js";
-import type { BudgetProposal } from "./ask-store.js";
+import type { BudgetProposal, BudgetPlanProposal, Proposal } from "./ask-store.js";
 import type { SpendingArgs } from "./ask-data.js";
 
 export interface Fact { label: string; value: string }
-export interface ProposalOut { id: string; kind: "budget"; title: string; detail: string; category: string; currentAmount: number; newAmount: number }
+export interface ProposalOut { id: string; kind: "budget" | "budget_plan"; title: string; detail: string; category: string; currentAmount: number; newAmount: number; items?: { category: string; currentAmount: number; newAmount: number }[] }
 export interface ChatMessage { role: "user" | "assistant"; content: string }
 
 /** What the tools read and write. The real implementation is services/ask-data + ask-store; tests inject fakes. */
@@ -21,7 +21,7 @@ export interface AskData {
   investments(userId: string): Promise<{ totalInvested: number; investmentAccounts: { name: string; balance: number; institution: string | null }[]; allocation: { label: string; amount: number; percent: number }[]; notes: { title: string; detail: string }[]; savingsRate: number | null }>;
   netWorthWindow(userId: string, from: string, to: string): Promise<{ startDate: string; endDate: string; start: number; end: number; snapshots: number } | null>;
   currentBudgetAmount(userId: string, category: string): Promise<number>;
-  createProposal(userId: string, payload: BudgetProposal): Promise<string>;
+  createProposal(userId: string, payload: Proposal): Promise<string>;
 }
 
 const money = (n: number) => (n < 0 ? "-" : "") + "$" + Math.abs(Math.round(n)).toLocaleString("en-US");
@@ -174,6 +174,42 @@ export const TOOLS = [
       };
     },
   }),
+  tool({
+    name: "propose_budget_plan",
+    description: "Propose a complete monthly budget (several categories at once), for example when the user asks you to build, create or redo their budget. Base the amounts on their income and recent spending (call get_income and get_spending first). This does NOT apply anything: the user taps one Confirm button to apply every category.",
+    schema: z.object({
+      items: z.array(z.object({ category: z.string().min(1).max(60), amount: z.number().min(0).max(10_000_000) })).min(1).max(20),
+      reason: z.string().max(300).optional(),
+    }),
+    async run(a, { userId, data }) {
+      const seen = new Set<string>();
+      const items: BudgetPlanProposal["items"] = [];
+      for (const raw of a.items) {
+        const category = normalizeCategory(raw.category);
+        if (NON_SPENDING.has(category) || seen.has(category)) continue;
+        seen.add(category);
+        items.push({ category, currentAmount: await data.currentBudgetAmount(userId, category), newAmount: Math.round(raw.amount) });
+      }
+      if (items.length === 0) throw new Error("No budgetable categories in that plan");
+      const newTotal = items.reduce((s, i) => s + i.newAmount, 0);
+      const currentTotal = items.reduce((s, i) => s + i.currentAmount, 0);
+      const payload: BudgetPlanProposal = {
+        kind: "budget_plan",
+        title: "Apply this budget",
+        detail: items.map((i) => `${i.category}: ${money(i.newAmount)}`).join("\n") + `\nTotal: ${money(newTotal)} a month`,
+        category: `${items.length} categories`,
+        currentAmount: currentTotal,
+        newAmount: newTotal,
+        items,
+      };
+      const id = await data.createProposal(userId, payload);
+      return {
+        result: { status: "awaiting_user_confirmation", categories: items.length, monthlyTotal: newTotal },
+        facts: [{ label: "Proposed budget", value: `${money(newTotal)} a month` }],
+        proposal: { id, ...payload },
+      };
+    },
+  }),
 ];
 
 export function toolSchemas() {
@@ -193,7 +229,7 @@ export function systemPrompt(today: string): string {
     "- Be concise: 2 to 5 short sentences, plain language, no markdown tables. Mention the specific numbers you used.",
     "- Investing: give general information only, not personalized advice. Never tell the user to buy, sell, or hold a specific security.",
     "- For compare_to_sp500, always tell the user the comparison is rough and repeat the caveat in one short sentence.",
-    "- You cannot change anything yourself. To change a budget, call propose_budget_change, then tell the user a Confirm button is shown below your answer.",
+    "- You cannot change anything yourself. To change one category, call propose_budget_change. To build or redo a whole budget, call propose_budget_plan once with every category. Then tell the user a Confirm button is shown below your answer.",
     "- If asked something unrelated to the user's finances in this app, politely say you can only help with their Folio data.",
   ].join("\n");
 }

@@ -19,6 +19,7 @@ struct PlanView: View {
             if embedded { core } else { NavigationStack { core } }
         }
         .task { await load() }
+        .onReceive(NotificationCenter.default.publisher(for: .budgetsChanged)) { _ in Task { await load() } }
     }
 
     private var core: some View {
@@ -186,6 +187,7 @@ struct PlanView: View {
                         }
                         .buttonStyle(.borderedProminent).controlSize(.large).disabled(creating)
                     }
+                    AskFolioButton(title: "Have Ask Folio build it", question: "Build me a complete monthly budget from my income and what I usually spend. Keep it realistic and leave room to save.", prominent: true)
                     Button("Start from scratch") { showBudget = true }.font(.subheadline)
                 } else {
                     TileButton { sheet = .budget } content: {
@@ -208,6 +210,8 @@ struct PlanView: View {
                             chevron
                         }
                     }
+
+                    AskFolioButton(title: "Ask Folio to review my budget", question: "Review my budget against my income and recent spending. Where am I likely to go over, and what would you change? If it should change, propose a new budget.")
 
                     VStack(spacing: 4) {
                         ForEach(budgets) { b in

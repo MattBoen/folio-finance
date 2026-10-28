@@ -17,6 +17,10 @@ struct AccountsView: View {
     @State private var editing: Account?
     @State private var deleting: Account?
     @State private var summaryGroup: AccountGroup?
+    @State private var banks: [PlaidItem] = []
+    @State private var reconnecting: PlaidItem?
+    @State private var disconnecting: PlaidItem?
+    @State private var refreshingBank: String?
 
     private var visible: [Account] { accounts.filter { !$0.isHidden } }
     private var hidden: [Account] { accounts.filter(\.isHidden) }
@@ -39,13 +43,11 @@ struct AccountsView: View {
                             EmptyStateCard(
                                 symbol: "building.columns.fill",
                                 title: "No accounts yet",
-                                message: "Add the accounts you want to track. You can enter balances by hand today and connect your bank later."
+                                message: "Connect your bank to bring in balances and activity automatically, or add an account by hand."
                             )
-                            Button { showAdd = true } label: {
-                                Label("Add account", systemImage: "plus")
-                                    .font(.headline).frame(maxWidth: .infinity).frame(height: 30)
-                            }
-                            .buttonStyle(.borderedProminent).controlSize(.large)
+                        }
+                        ForEach(banks.filter { $0.status != .active }) { b in
+                            attentionBanner(b)
                         }
 
                         ForEach(Array(AccountGroup.allCases.enumerated()), id: \.element) { i, g in
@@ -55,6 +57,10 @@ struct AccountsView: View {
                                     .flowIn(i)
                             }
                         }
+
+                        if loaded { addMoreCard.flowIn() }
+
+                        if !banks.isEmpty { banksCard.flowIn() }
 
                         if !hidden.isEmpty {
                             VStack(spacing: 8) {
@@ -75,7 +81,10 @@ struct AccountsView: View {
                     .padding(.bottom, 24)
                 }
                 .scrollIndicators(.hidden)
-                .refreshable { await load() }
+                .refreshable {
+                    await BankSync.run(auth, force: true)
+                    await load()
+                }
                 .overlay { if isLoading && !loaded { ProgressView().controlSize(.large) } }
             }
             .titledUnlessEmbedded("Accounts", embedded: embedded)
@@ -91,7 +100,21 @@ struct AccountsView: View {
                 } }
             }
             .sheet(isPresented: $showAdd) { AddAccountSheet { Task { await load() } } }
-            .sheet(isPresented: $showConnect) { PlaidLinkSheet() }
+            .sheet(isPresented: $showConnect, onDismiss: { Task { await load() } }) { PlaidLinkSheet() }
+            .sheet(item: $reconnecting, onDismiss: { Task { await load() } }) { b in
+                PlaidLinkSheet(reconnectItemId: b.id, reconnectName: b.institutionName)
+            }
+            .confirmationDialog(
+                "Disconnect \(disconnecting?.institutionName ?? "this bank")?",
+                isPresented: Binding(get: { disconnecting != nil }, set: { if !$0 { disconnecting = nil } }),
+                titleVisibility: .visible
+            ) {
+                Button("Disconnect", role: .destructive) {
+                    if let b = disconnecting { Task { await disconnect(b) } }
+                }
+            } message: {
+                Text("Its accounts and their history are removed from Folio, and Folio stops receiving data from this bank.")
+            }
             .sheet(isPresented: $showCar, onDismiss: { Task { await load() } }) { AddCarSheet { Task { await load() } } }
             .sheet(item: $editing) { a in EditAccountSheet(account: a) { Task { await load() } } }
             .sheet(item: $summaryGroup) { g in groupSheet(g) }
@@ -153,12 +176,119 @@ struct AccountsView: View {
         error = nil
         do {
             let r: AccountsResponse = try await auth.withFreshToken(.accounts)
-            accounts = r.accounts
+            withAnimation(Motion.spring) { accounts = r.accounts }
         } catch {
             self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
+        if !auth.isDemo, let r: PlaidItemsResponse = try? await auth.withFreshToken(.plaidItems) {
+            withAnimation(Motion.spring) { banks = r.items }
+        }
         isLoading = false
         loaded = true
+        // Pull anything new from the banks in the background, then show it.
+        if let r = await BankSync.run(auth), r.synced > 0 || r.needsAttention > 0 {
+            if let a: AccountsResponse = try? await auth.withFreshToken(.accounts) { withAnimation(Motion.spring) { accounts = a.accounts } }
+            if let b: PlaidItemsResponse = try? await auth.withFreshToken(.plaidItems) { withAnimation(Motion.spring) { banks = b.items } }
+        }
+    }
+
+    private func refreshBank(_ b: PlaidItem) async {
+        refreshingBank = b.id
+        do {
+            let _: AnyDecodable = try await auth.withFreshToken(.refreshPlaidItem(id: b.id))
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+        } catch {
+            self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+        refreshingBank = nil
+        await load()
+    }
+
+    private func disconnect(_ b: PlaidItem) async {
+        do {
+            let _: AnyDecodable = try await auth.withFreshToken(.removePlaidItem(id: b.id))
+            disconnecting = nil
+            await load()
+        } catch {
+            disconnecting = nil
+            self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    // MARK: Banks
+
+    private var addMoreCard: some View {
+        HStack(spacing: 10) {
+            Button { showConnect = true } label: {
+                Label("Connect a bank", systemImage: "link")
+                    .font(.subheadline.weight(.semibold)).frame(maxWidth: .infinity).frame(height: 28)
+            }
+            .buttonStyle(.borderedProminent)
+            Button { showAdd = true } label: {
+                Label("Add by hand", systemImage: "square.and.pencil")
+                    .font(.subheadline.weight(.semibold)).frame(maxWidth: .infinity).frame(height: 28)
+            }
+            .buttonStyle(.bordered)
+        }
+        .controlSize(.large)
+    }
+
+    private func attentionBanner(_ b: PlaidItem) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(b.institutionName ?? "A bank") stopped syncing").font(.subheadline.weight(.semibold))
+                Text("Sign in again to keep balances up to date.").font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            Button("Reconnect") { reconnecting = b }.font(.subheadline.weight(.semibold)).buttonStyle(.bordered)
+        }
+        .padding(14)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private var banksCard: some View {
+        VStack(spacing: 8) {
+            SectionTitle("Connected banks", trailing: "Through Plaid")
+            Card(padding: 0) {
+                VStack(spacing: 0) {
+                    ForEach(banks) { b in
+                        HStack(spacing: 12) {
+                            IconBadge(symbol: "building.columns.fill", color: b.status == .active ? .blue : .orange, size: 36)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(b.institutionName ?? "Bank").font(.body).lineLimit(1)
+                                Text(bankDetail(b)).font(.caption).foregroundStyle(b.status == .active ? Color.secondary : Color.orange)
+                            }
+                            Spacer(minLength: 8)
+                            if refreshingBank == b.id {
+                                ProgressView()
+                            } else {
+                                Menu {
+                                    if b.status != .active {
+                                        Button { reconnecting = b } label: { Label("Reconnect", systemImage: "arrow.triangle.2.circlepath") }
+                                    }
+                                    Button { Task { await refreshBank(b) } } label: { Label("Refresh now", systemImage: "arrow.clockwise") }
+                                    Button(role: .destructive) { disconnecting = b } label: { Label("Disconnect", systemImage: "xmark.circle") }
+                                } label: {
+                                    Image(systemName: "ellipsis.circle").font(.title3).foregroundStyle(.secondary)
+                                        .frame(width: 36, height: 36).contentShape(Rectangle())
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 16).padding(.vertical, 10)
+                        if b.id != banks.last?.id { Divider().padding(.leading, 64) }
+                    }
+                }
+            }
+        }
+    }
+
+    private func bankDetail(_ b: PlaidItem) -> String {
+        if b.status != .active { return "Needs you to sign in again" }
+        let n = b.accountCount ?? 0
+        let accounts = "\(n) account\(n == 1 ? "" : "s")"
+        guard let t = b.lastSyncedAt else { return accounts }
+        return accounts + " · Updated " + t.formatted(.relative(presentation: .named))
     }
 
     private func setHidden(_ a: Account, _ hidden: Bool) async {

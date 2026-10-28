@@ -14,6 +14,8 @@ struct OverviewView: View {
     @State private var error: String?
     @State private var selectedDate: Date?
     @State private var showAddAccount = false
+    @State private var showConnect = false
+    @State private var showCar = false
     @State private var detail: Transaction?
     @State private var summary: Summary?
     @EnvironmentObject private var router: TabRouter
@@ -75,13 +77,14 @@ struct OverviewView: View {
                             EmptyStateCard(
                                 symbol: "plus.circle.fill",
                                 title: "Add your first account",
-                                message: "Enter a checking, savings, investment or loan balance to see your net worth take shape."
+                                message: "Connect your bank to see your net worth, spending and budget fill in on their own."
                             )
-                            Button { showAddAccount = true } label: {
-                                Label("Add account", systemImage: "plus")
+                            Button { showConnect = true } label: {
+                                Label("Connect a bank", systemImage: "link")
                                     .font(.headline).frame(maxWidth: .infinity).frame(height: 30)
                             }
                             .buttonStyle(.borderedProminent).controlSize(.large)
+                            Button("Add an account by hand") { showAddAccount = true }.font(.subheadline)
                         } else if !visible.isEmpty {
                             chartCard.flowIn(1)
                             thisMonthCard.flowIn(2)
@@ -102,14 +105,28 @@ struct OverviewView: View {
                     .padding(.horizontal, 16)
                     .padding(.bottom, 24)
                 }
-                .refreshable { await load() }
+                .refreshable {
+                    await BankSync.run(auth, force: true)
+                    await load()
+                }
                 .overlay {
                     if isLoading && !loaded { ProgressView().controlSize(.large) }
                 }
             }
             .navigationTitle("Overview")
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { ProfileMenu() } }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button { showConnect = true } label: { Label("Connect a bank", systemImage: "link") }
+                        Button { showAddAccount = true } label: { Label("Add account by hand", systemImage: "square.and.pencil") }
+                        Button { showCar = true } label: { Label("Add a car", systemImage: "car.fill") }
+                    } label: { Image(systemName: "plus") }
+                }
+                ToolbarItem(placement: .topBarTrailing) { ProfileMenu() }
+            }
             .sheet(isPresented: $showAddAccount) { AddAccountSheet { Task { await load() } } }
+            .sheet(isPresented: $showConnect, onDismiss: { Task { await load() } }) { PlaidLinkSheet() }
+            .sheet(isPresented: $showCar, onDismiss: { Task { await load() } }) { AddCarSheet { Task { await load() } } }
             .sheet(item: $summary) { kind in
                 switch kind {
                 case .netWorth: NetWorthSummarySheet(assets: assets, liabilities: liabilities)
@@ -351,6 +368,8 @@ struct OverviewView: View {
         isLoading = false
         loaded = true
         publishWidgetSnapshot()
+        // Pull anything new from connected banks in the background; reload only if something changed.
+        if let r = await BankSync.run(auth), r.synced > 0 { await load() }
     }
 
     /// Leaves a small summary where the home-screen widgets can read it.

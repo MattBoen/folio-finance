@@ -67,7 +67,22 @@ export interface BudgetProposal {
   newAmount: number;
 }
 
-export async function createProposal(userId: string, payload: BudgetProposal): Promise<string> {
+export interface BudgetPlanItem { category: string; currentAmount: number; newAmount: number }
+
+/** A whole budget at once: one Confirm applies every category. */
+export interface BudgetPlanProposal {
+  kind: "budget_plan";
+  title: string;
+  detail: string;
+  category: string;
+  currentAmount: number;
+  newAmount: number;
+  items: BudgetPlanItem[];
+}
+
+export type Proposal = BudgetProposal | BudgetPlanProposal;
+
+export async function createProposal(userId: string, payload: Proposal): Promise<string> {
   const [row] = await db
     .insert(askProposals)
     .values({ userId, payload, expiresAt: new Date(Date.now() + PROPOSAL_TTL_MS) })
@@ -89,8 +104,10 @@ export async function confirmProposal(userId: string, proposalId: string): Promi
   if (p.appliedAt || p.dismissedAt) return { ok: false, status: 409, error: "That change was already handled." };
   if (p.expiresAt.getTime() < Date.now()) return { ok: false, status: 410, error: "That suggestion expired. Ask again." };
 
-  const payload = p.payload as BudgetProposal;
-  if (payload.kind !== "budget") return { ok: false, status: 404, error: "Not found" };
+  const stored = p.payload as Proposal;
+  if (stored.kind === "budget_plan") return applyPlan(userId, proposalId, stored);
+  if (stored.kind !== "budget") return { ok: false, status: 404, error: "Not found" };
+  const payload = stored;
   const category = normalizeCategory(payload.category);
   const categoryId = await findOrCreateCategory(category);
   const amount = Math.max(0, payload.newAmount).toFixed(2);
@@ -121,6 +138,39 @@ export async function confirmProposal(userId: string, proposalId: string): Promi
 
   const verb = payload.newAmount <= 0 ? "removed" : "set to $" + Math.round(payload.newAmount).toLocaleString("en-US");
   return { ok: true, message: `${category} budget ${verb}.` };
+}
+
+async function applyPlan(userId: string, proposalId: string, plan: BudgetPlanProposal): Promise<ConfirmResult> {
+  const resolved = await Promise.all(
+    plan.items.map(async (i) => ({ ...i, categoryId: await findOrCreateCategory(normalizeCategory(i.category)) }))
+  );
+  await db.transaction(async (tx) => {
+    const claimed = await tx
+      .update(askProposals)
+      .set({ appliedAt: new Date() })
+      .where(and(eq(askProposals.id, proposalId), eq(askProposals.userId, userId), sql`${askProposals.appliedAt} is null`))
+      .returning({ id: askProposals.id });
+    if (claimed.length === 0) throw new Error("already-applied");
+    for (const i of resolved) {
+      if (i.newAmount <= 0) {
+        await tx.delete(budgets).where(and(eq(budgets.userId, userId), eq(budgets.categoryId, i.categoryId)));
+      } else {
+        const amount = Math.max(0, i.newAmount).toFixed(2);
+        await tx
+          .insert(budgets)
+          .values({ userId, categoryId: i.categoryId, monthlyAmount: amount })
+          .onConflictDoUpdate({
+            target: [budgets.userId, budgets.categoryId],
+            set: { monthlyAmount: amount, isActive: true, updatedAt: new Date() },
+          });
+      }
+    }
+  }).catch((e: Error) => {
+    if (e.message === "already-applied") return;
+    throw e;
+  });
+  const total = plan.items.reduce((s, i) => s + Math.max(0, i.newAmount), 0);
+  return { ok: true, message: `Budget set: ${plan.items.length} categories, $${Math.round(total).toLocaleString("en-US")} a month.` };
 }
 
 export async function dismissProposal(userId: string, proposalId: string): Promise<boolean> {
