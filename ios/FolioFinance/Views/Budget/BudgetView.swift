@@ -42,6 +42,30 @@ struct SpendingView: View {
 
     private var expenses: [Transaction] { transactions.filter { $0.isDebit && Self.countsAsSpending($0) } }
     private var incomes: [Transaction] { transactions.filter { !$0.isDebit && Self.countsAsSpending($0) } }
+    /// Out-of-pocket purchases the customer excluded: still shown, crossed out, and left out of every total.
+    private var excludedRows: [Transaction] {
+        transactions.filter { $0.isDebit && $0.isExcluded && !$0.category.lowercased().contains("transfer") }.sorted { $0.date > $1.date }
+    }
+
+    private var excludedCard: some View {
+        VStack(spacing: 8) {
+            SectionTitle("Excluded", trailing: "Not counted in spending")
+            Card(padding: 0) {
+                VStack(spacing: 0) {
+                    ForEach(excludedRows) { t in
+                        Button { detail = t } label: {
+                            TransactionRow(transaction: t)
+                                .padding(.horizontal, 16).padding(.vertical, 10)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(PressableRowStyle())
+                        if t.id != excludedRows.last?.id { Divider().padding(.leading, 66) }
+                    }
+                }
+            }
+        }
+    }
+
     private var spent: Double { expenses.reduce(0) { $0 + $1.doubleAmount } }
     private var earned: Double { incomes.reduce(0) { $0 + abs($1.doubleAmount) } }
 
@@ -87,6 +111,7 @@ struct SpendingView: View {
                             AskFolioButton(title: "Ask Folio where my money went", question: "Where is my money going this month compared with usual, and where could I realistically cut back?")
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             categoriesCard
+                            if !excludedRows.isEmpty { excludedCard.flowIn() }
                         }
                     }
                     .padding(.horizontal, 16)

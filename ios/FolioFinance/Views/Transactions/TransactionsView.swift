@@ -207,7 +207,7 @@ struct TransactionRow: View {
         HStack(spacing: 12) {
             IconBadge(symbol: style.symbol, color: style.color, size: 38)
             VStack(alignment: .leading, spacing: 2) {
-                Text(transaction.displayName).font(.body).lineLimit(1)
+                Text(transaction.displayName).font(.body).lineLimit(1).strikethrough(transaction.isExcluded)
                 HStack(spacing: 6) {
                     Text([transaction.category, transaction.accountName].compactMap { $0 }.joined(separator: " · "))
                         .lineLimit(1)
@@ -220,6 +220,7 @@ struct TransactionRow: View {
             Text((transaction.isDebit ? "−" : "+") + money(amount, cents: true))
                 .font(.body.weight(.semibold)).monospacedDigit()
                 .foregroundStyle(transaction.isDebit ? Color.primary : Color.up)
+                .strikethrough(transaction.isExcluded)
                 .sensitive()
         }
         .opacity(transaction.isExcluded ? 0.5 : 1)
