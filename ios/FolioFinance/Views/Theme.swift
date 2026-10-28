@@ -194,6 +194,9 @@ struct ProfileMenu: View {
     @AppStorage("hideAmounts") private var hide = false
     @State private var confirmSignOut = false
     @State private var showSetup = false
+    @State private var showDelete = false
+    @State private var deletePassword = ""
+    @State private var deleteError: String?
 
     var body: some View {
         Menu {
@@ -209,6 +212,13 @@ struct ProfileMenu: View {
             if auth.isDemo {
                 Section("Sample data") { Text("Changes aren't saved in demo mode") }
             }
+            Link(destination: AppLinks.privacy) { Label("Privacy Policy", systemImage: "hand.raised") }
+            Link(destination: AppLinks.support) { Label("Contact Support", systemImage: "envelope") }
+            if !auth.isDemo {
+                Button(role: .destructive) { deleteError = nil; deletePassword = ""; showDelete = true } label: {
+                    Label("Delete Account", systemImage: "trash")
+                }
+            }
             Button(role: .destructive) { confirmSignOut = true } label: {
                 Label(auth.isDemo ? "Exit demo" : "Sign out", systemImage: "rectangle.portrait.and.arrow.right")
             }
@@ -216,10 +226,29 @@ struct ProfileMenu: View {
             Image(systemName: "person.crop.circle")
         }
         .fullScreenCover(isPresented: $showSetup) { OnboardingFlow { showSetup = false } }
+        .alert("Delete your account?", isPresented: $showDelete) {
+            SecureField("Password", text: $deletePassword)
+            Button("Delete Everything", role: .destructive) {
+                Task {
+                    if let message = await auth.deleteAccount(password: deletePassword) { deleteError = message }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This permanently deletes your accounts, transactions, budgets and settings, and disconnects your banks. It can't be undone. Enter your password to confirm.")
+        }
+        .alert("Couldn't delete account", isPresented: Binding(get: { deleteError != nil }, set: { if !$0 { deleteError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: { Text(deleteError ?? "") }
         .confirmationDialog(auth.isDemo ? "Exit the demo?" : "Sign out of Folio?", isPresented: $confirmSignOut, titleVisibility: .visible) {
             Button(auth.isDemo ? "Exit demo" : "Sign out", role: .destructive) { auth.logout() }
         }
     }
+}
+
+enum AppLinks {
+    static let privacy = URL(string: "https://folio-finance-api.onrender.com/privacy")!
+    static let support = URL(string: "mailto:folio.finance.app@gmail.com")!
 }
 
 // MARK: - Formatting

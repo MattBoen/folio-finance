@@ -24,7 +24,6 @@ struct MainTabView: View {
 /// Shows setup the first time a signed-in user has no accounts.
 struct RootView: View {
     @EnvironmentObject private var auth: AuthManager
-    @AppStorage("setupSeenV2") private var setupSeen = false
     @EnvironmentObject private var lock: AppLock
     @State private var showSetup = false
     @State private var askFaceID = false
@@ -33,7 +32,7 @@ struct RootView: View {
         MainTabView()
             .fullScreenCover(isPresented: $showSetup, onDismiss: { maybeAskFaceID() }) {
                 OnboardingFlow {
-                    setupSeen = true
+                    auth.markSetupSeen()
                     showSetup = false
                 }
             }
@@ -48,7 +47,7 @@ struct RootView: View {
                 if ProcessInfo.processInfo.arguments.contains("-showOnboarding") { showSetup = true; return }
                 #endif
                 guard !auth.isDemo else { return }
-                if !setupSeen {
+                if !auth.hasSeenSetup {
                     showSetup = true
                     return
                 }

@@ -2,9 +2,9 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
-import { eq, and, gt, isNull } from "drizzle-orm";
+import { eq, and, gt, isNull, isNotNull, lt, or } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { users, refreshTokens, auditLog } from "../db/schema.js";
+import { users, refreshTokens } from "../db/schema.js";
 import {
   signAccessToken,
   generateRefreshToken,
@@ -38,7 +38,15 @@ const refreshSchema = z.object({
   refresh_token: z.string(),
 });
 
+/** Retention: expired or revoked sessions are deleted whenever a user signs in or refreshes. */
+async function purgeDeadSessions(userId: string) {
+  await db
+    .delete(refreshTokens)
+    .where(and(eq(refreshTokens.userId, userId), or(lt(refreshTokens.expiresAt, new Date()), isNotNull(refreshTokens.revokedAt))));
+}
+
 async function issueTokenPair(userId: string, plan: string) {
+  await purgeDeadSessions(userId);
   const accessToken = await signAccessToken(userId, plan);
   const { raw, hash, expiresAt } = generateRefreshToken();
   await db.insert(refreshTokens).values({ userId, tokenHash: hash, expiresAt });
@@ -183,30 +191,6 @@ auth.delete("/session", requireAuth, async (c) => {
     .update(refreshTokens)
     .set({ revokedAt: new Date() })
     .where(and(eq(refreshTokens.userId, userId), isNull(refreshTokens.revokedAt)));
-
-  return c.body(null, 204);
-});
-
-// DELETE /auth/account (GDPR account deletion)
-auth.delete("/account", requireAuth, async (c) => {
-  const { userId } = c.get("auth");
-
-  await db
-    .update(users)
-    .set({ deletedAt: new Date() })
-    .where(eq(users.id, userId));
-
-  await db
-    .update(refreshTokens)
-    .set({ revokedAt: new Date() })
-    .where(eq(refreshTokens.userId, userId));
-
-  await db.insert(auditLog).values({
-    userId,
-    action: "account_deleted",
-    resourceType: "user",
-    resourceId: userId,
-  });
 
   return c.body(null, 204);
 });

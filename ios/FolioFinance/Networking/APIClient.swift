@@ -3,7 +3,16 @@ import Foundation
 actor APIClient {
     static let shared = APIClient()
 
+    #if DEBUG
+    /// Debug builds can target a server on this Mac: launch with `-apiBase http://localhost:3999`.
+    private let baseURL: URL = {
+        let args = ProcessInfo.processInfo.arguments
+        if let i = args.firstIndex(of: "-apiBase"), i + 1 < args.count, let u = URL(string: args[i + 1]) { return u }
+        return URL(string: "https://folio-finance-api.onrender.com")!
+    }()
+    #else
     private let baseURL = URL(string: "https://folio-finance-api.onrender.com")!
+    #endif
 
     private let session: URLSession = {
         let config = URLSessionConfiguration.default
@@ -30,7 +39,9 @@ actor APIClient {
         _ endpoint: Endpoint,
         token: String? = nil
     ) async throws -> T {
-        var req = URLRequest(url: baseURL.appendingPathComponent(endpoint.path))
+        // Resolve against the base so a query string (?days=90) stays a query instead of being percent-encoded into the path.
+        guard let url = URL(string: endpoint.path, relativeTo: baseURL)?.absoluteURL else { throw APIError.invalidResponse }
+        var req = URLRequest(url: url)
         req.httpMethod = endpoint.method
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("application/json", forHTTPHeaderField: "Accept")

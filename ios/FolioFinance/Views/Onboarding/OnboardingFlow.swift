@@ -144,11 +144,14 @@ private struct PlaidExplainerStep: View {
                 Pill(symbol: "eye.fill", color: .teal, title: "Read-only", detail: "Folio can see balances and transactions. It can't move money or make payments.")
                 Pill(symbol: "hand.raised.fill", color: .indigo, title: "You're in control", detail: "Choose which accounts to share and disconnect any time in Accounts.")
                 Pill(symbol: "externaldrive.fill.badge.checkmark", color: .green, title: "Encrypted and private", detail: "Your data is encrypted, never sold, and never used for ads.")
-                Text("By connecting, you allow Plaid to share the account data you choose with Folio. Plaid's own privacy policy applies to the connection.")
-                    .font(.footnote).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("By tapping Agree and continue, you allow Folio to use the account data you connect, as described in our Privacy Policy, and Plaid to share it with Folio.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                    Link("Read the Privacy Policy", destination: AppLinks.privacy).font(.footnote.weight(.semibold))
+                }
             }
         } footer: {
-            PrimaryButton(title: "Continue", action: connect)
+            PrimaryButton(title: "Agree and continue", action: connect)
             Button("I'll add accounts myself", action: skip).font(.subheadline)
         }
     }

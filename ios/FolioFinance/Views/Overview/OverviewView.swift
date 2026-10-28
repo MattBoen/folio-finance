@@ -187,14 +187,15 @@ struct OverviewView: View {
     private func load() async {
         isLoading = true
         error = nil
-        async let accountsTask: AccountsResponse = auth.withFreshToken(.accounts)
-        async let chartTask: NetWorthHistoryResponse = auth.withFreshToken(.netWorthHistory(days: range))
         do {
-            let (a, c) = try await (accountsTask, chartTask)
+            let a: AccountsResponse = try await auth.withFreshToken(.accounts)
             accounts = a.accounts
-            points = Self.makePoints(c)
         } catch {
             self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+        // The trend chart is optional: accounts still show if history can't load.
+        if let c: NetWorthHistoryResponse = try? await auth.withFreshToken(.netWorthHistory(days: range)) {
+            points = Self.makePoints(c)
         }
         isLoading = false
         loaded = true

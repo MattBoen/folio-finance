@@ -117,6 +117,12 @@ extension Endpoint {
 
     static func deleteAccount(id: String) -> Endpoint { .delete("/accounts/\(id)") }
 
+    /// Permanently deletes the signed-in customer and all of their data.
+    static func deleteMyAccount(password: String) -> Endpoint {
+        struct Body: Encodable { let password: String }
+        return Endpoint(method: "DELETE", path: "/account", body: try? JSONEncoder().encode(Body(password: password)))
+    }
+
     static func setAccountHidden(id: String, hidden: Bool) -> Endpoint {
         struct Body: Encodable { let hidden: Bool }
         return .patch("/accounts/\(id)/hidden", body: Body(hidden: hidden))

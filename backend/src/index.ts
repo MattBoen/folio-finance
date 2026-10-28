@@ -11,6 +11,8 @@ import { insightsRouter } from "./routes/insights.js";
 import { budgetsRouter } from "./routes/budgets.js";
 import { settingsRouter } from "./routes/settings.js";
 import { vehiclesRouter } from "./routes/vehicles.js";
+import { accountRouter } from "./routes/account.js";
+import { legal } from "./routes/legal.js";
 
 const app = new Hono();
 
@@ -28,6 +30,8 @@ app.route("/insights", insightsRouter);
 app.route("/budgets", budgetsRouter);
 app.route("/settings", settingsRouter);
 app.route("/vehicles", vehiclesRouter);
+app.route("/account", accountRouter);
+app.route("/", legal);
 
 app.onError((err, c) => {
   console.error("[unhandled]", err.message);

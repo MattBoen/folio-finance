@@ -98,6 +98,11 @@ struct LoginView: View {
                     }
                     .padding(.horizontal, 20)
 
+                    if isRegistering {
+                        Text("By creating an account you agree to our [Privacy Policy](\(AppLinks.privacy.absoluteString)).")
+                            .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center).padding(.horizontal, 32)
+                    }
+
                     Button {
                         withAnimation(.snappy) { isRegistering.toggle() }
                         auth.clearError()

@@ -159,3 +159,24 @@ struct LockView: View {
         .task { await lock.unlock() }
     }
 }
+
+
+// MARK: - Step-up check before connecting a bank
+
+import LocalAuthentication
+
+/// A second factor on this device (Face ID / Touch ID, falling back to the passcode) required right before Plaid Link opens.
+enum StepUpAuth {
+    enum Outcome { case verified, cancelled, unavailable }
+
+    static func challenge(reason: String = "Confirm it's you before connecting an account") async -> Outcome {
+        let ctx = LAContext()
+        var error: NSError?
+        guard ctx.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else { return .unavailable }
+        do {
+            return try await ctx.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) ? .verified : .cancelled
+        } catch {
+            return .cancelled
+        }
+    }
+}

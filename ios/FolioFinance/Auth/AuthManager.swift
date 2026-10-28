@@ -41,8 +41,7 @@ final class AuthManager: ObservableObject {
         await perform {
             do {
                 let response: AuthResponse = try await self.api.request(.login(email: email, password: password))
-                // An existing account signing in (e.g. on a new phone) has already done setup.
-                UserDefaults.standard.set(true, forKey: "setupSeenV2")
+                UserDefaults.standard.set(email, forKey: "currentEmail")
                 self.store(response)
             } catch APIError.unauthorized {
                 throw APIError.server(401, "That email and password don't match.")
@@ -60,8 +59,7 @@ final class AuthManager: ObservableObject {
             let response: AuthResponse = try await self.api.request(
                 .register(email: email, password: password)
             )
-            // A brand-new account always gets the introduction.
-            UserDefaults.standard.set(false, forKey: "setupSeenV2")
+            UserDefaults.standard.set(email, forKey: "currentEmail")
             self.store(response)
         }
     }
@@ -73,12 +71,35 @@ final class AuthManager: ObservableObject {
     }
 
     func logout() {
-        UserDefaults.standard.set(false, forKey: "setupSeenV2")
         accessToken = nil
         refreshToken = nil
         isDemo = false
         isAuthenticated = false
         error = nil
+    }
+
+    /// Returns an error message, or nil after the account is gone and the session is cleared.
+    func deleteAccount(password: String) async -> String? {
+        do {
+            let _: AnyDecodable = try await withFreshToken(.deleteMyAccount(password: password))
+            logout()
+            return nil
+        } catch {
+            return (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    /// Each account sees the introduction once per phone; "Set up Folio" in the profile menu replays it.
+    var hasSeenSetup: Bool {
+        let email = UserDefaults.standard.string(forKey: "currentEmail") ?? ""
+        return (UserDefaults.standard.stringArray(forKey: "setupSeenEmails") ?? []).contains(email)
+    }
+
+    func markSetupSeen() {
+        let email = UserDefaults.standard.string(forKey: "currentEmail") ?? ""
+        var seen = UserDefaults.standard.stringArray(forKey: "setupSeenEmails") ?? []
+        if !seen.contains(email) { seen.append(email) }
+        UserDefaults.standard.set(seen, forKey: "setupSeenEmails")
     }
 
     func startDemo() {
