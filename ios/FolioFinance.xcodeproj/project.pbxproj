@@ -7,6 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		14BDA2F1FF89026E7568305C /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 58258D68C3BF9B6BF5F45995 /* Foundation.framework */; };
+		20BAC7B40D595591BCDAAEA7 /* FolioWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41E774D9A553AA31181E7193 /* FolioWidgets.swift */; };
+		32B0BE3F0831ED0599E3D393 /* WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 803263EA63F9DF978A85041C /* WidgetSnapshot.swift */; };
+		3BA7E5F77B8043A3E8AACE12 /* FolioWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E186547C3473C27CA4F71538 /* FolioWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A1CB8BD672669AFC2B600B15 /* WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 803263EA63F9DF978A85041C /* WidgetSnapshot.swift */; };
 		AA0000000000000000000020 /* FolioFinanceApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000010 /* FolioFinanceApp.swift */; };
 		AA0000000000000000000021 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000011 /* APIClient.swift */; };
 		AA0000000000000000000022 /* Endpoints.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000012 /* Endpoints.swift */; };
@@ -24,7 +29,6 @@
 		AA000000000000000000002E /* PlaidItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000001D /* PlaidItem.swift */; };
 		AA0000000000000000000030 /* PlaidLinkSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000001E /* PlaidLinkSheet.swift */; };
 		AA0000000000000000000031 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000001F /* Assets.xcassets */; };
-		AC0D1F5A3091270D0066B739 /* LinkKit in Frameworks */ = {isa = PBXBuildFile; productRef = AC0D1F593091270D0066B739 /* LinkKit */; };
 		AA0000000000000000000103 /* PlanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000102 /* PlanView.swift */; };
 		AA0000000000000000000105 /* Insights.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000104 /* Insights.swift */; };
 		AA0000000000000000000108 /* OnboardingFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000107 /* OnboardingFlow.swift */; };
@@ -38,9 +42,39 @@
 		AA000000000000000000011C /* AskModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000011B /* AskModels.swift */; };
 		AA000000000000000000011F /* SpendingHostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000011E /* SpendingHostView.swift */; };
 		AA0000000000000000000122 /* InvestingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000121 /* InvestingView.swift */; };
+		AC0D1F5A3091270D0066B739 /* LinkKit in Frameworks */ = {isa = PBXBuildFile; productRef = AC0D1F593091270D0066B739 /* LinkKit */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		1B068CC370021C53A3660AF5 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA0000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1FD9051072DF380C7F01F3F7;
+			remoteInfo = FolioWidgets;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		DD8E388FA243BBD9DD15514E /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				3BA7E5F77B8043A3E8AACE12 /* FolioWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		41E774D9A553AA31181E7193 /* FolioWidgets.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FolioWidgets.swift; sourceTree = "<group>"; };
+		58258D68C3BF9B6BF5F45995 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		803263EA63F9DF978A85041C /* WidgetSnapshot.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WidgetSnapshot.swift; sourceTree = "<group>"; };
+		87A5069034F52FF62A087482 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		91EBDF72A50B987F6D55A772 /* FolioFinance.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = FolioFinance.entitlements; sourceTree = "<group>"; };
 		AA000000000000000000000E /* FolioFinance.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FolioFinance.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000010 /* FolioFinanceApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolioFinanceApp.swift; sourceTree = "<group>"; };
 		AA0000000000000000000011 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
@@ -72,9 +106,19 @@
 		AA000000000000000000011B /* AskModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskModels.swift; sourceTree = "<group>"; };
 		AA000000000000000000011E /* SpendingHostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpendingHostView.swift; sourceTree = "<group>"; };
 		AA0000000000000000000121 /* InvestingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvestingView.swift; sourceTree = "<group>"; };
+		C330286129F2BC5A0C4C2ACA /* FolioWidgets.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = FolioWidgets.entitlements; sourceTree = "<group>"; };
+		E186547C3473C27CA4F71538 /* FolioWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = FolioWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		522554220947933DEAB8749B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				14BDA2F1FF89026E7568305C /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		AA0000000000000000000004 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -86,11 +130,49 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		0130D59C686BE300D343593D /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				803263EA63F9DF978A85041C /* WidgetSnapshot.swift */,
+			);
+			name = Shared;
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		56FADE518003226196B649BC /* FolioWidgets */ = {
+			isa = PBXGroup;
+			children = (
+				41E774D9A553AA31181E7193 /* FolioWidgets.swift */,
+				87A5069034F52FF62A087482 /* Info.plist */,
+				C330286129F2BC5A0C4C2ACA /* FolioWidgets.entitlements */,
+			);
+			name = FolioWidgets;
+			path = FolioWidgets;
+			sourceTree = "<group>";
+		};
+		59583ABB60274523A6B59F6E /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				677F2AE4359E7F56730C2550 /* iOS */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		677F2AE4359E7F56730C2550 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				58258D68C3BF9B6BF5F45995 /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
 		AA000000000000000000000C = {
 			isa = PBXGroup;
 			children = (
 				AA000000000000000000000F /* FolioFinance */,
 				AA000000000000000000000D /* Products */,
+				59583ABB60274523A6B59F6E /* Frameworks */,
+				56FADE518003226196B649BC /* FolioWidgets */,
 			);
 			sourceTree = "<group>";
 		};
@@ -98,6 +180,7 @@
 			isa = PBXGroup;
 			children = (
 				AA000000000000000000000E /* FolioFinance.app */,
+				E186547C3473C27CA4F71538 /* FolioWidgets.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -111,6 +194,8 @@
 				AA0000000000000000000034 /* Models */,
 				AA0000000000000000000035 /* Views */,
 				AA0000000000000000000036 /* Resources */,
+				0130D59C686BE300D343593D /* Shared */,
+				91EBDF72A50B987F6D55A772 /* FolioFinance.entitlements */,
 			);
 			path = FolioFinance;
 			sourceTree = "<group>";
@@ -286,6 +371,23 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		1FD9051072DF380C7F01F3F7 /* FolioWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 96C21A859E99F24269F41FC6 /* Build configuration list for PBXNativeTarget "FolioWidgets" */;
+			buildPhases = (
+				DBF5BDF5CC909A0F065ABA30 /* Sources */,
+				522554220947933DEAB8749B /* Frameworks */,
+				A1DAE9531532857B04A1AD1B /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = FolioWidgets;
+			productName = FolioWidgets;
+			productReference = E186547C3473C27CA4F71538 /* FolioWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		AA0000000000000000000002 /* FolioFinance */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = AA0000000000000000000007 /* Build configuration list for PBXNativeTarget "FolioFinance" */;
@@ -293,10 +395,12 @@
 				AA0000000000000000000003 /* Sources */,
 				AA0000000000000000000004 /* Frameworks */,
 				AA0000000000000000000005 /* Resources */,
+				DD8E388FA243BBD9DD15514E /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				ED9590643D18E846F5B2AFFC /* PBXTargetDependency */,
 			);
 			name = FolioFinance;
 			packageProductDependencies = (
@@ -338,11 +442,19 @@
 			projectRoot = "";
 			targets = (
 				AA0000000000000000000002 /* FolioFinance */,
+				1FD9051072DF380C7F01F3F7 /* FolioWidgets */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		A1DAE9531532857B04A1AD1B /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		AA0000000000000000000005 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -387,10 +499,29 @@
 				AA000000000000000000002D /* Transaction.swift in Sources */,
 				AA000000000000000000002E /* PlaidItem.swift in Sources */,
 				AA0000000000000000000030 /* PlaidLinkSheet.swift in Sources */,
+				32B0BE3F0831ED0599E3D393 /* WidgetSnapshot.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DBF5BDF5CC909A0F065ABA30 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				20BAC7B40D595591BCDAAEA7 /* FolioWidgets.swift in Sources */,
+				A1CB8BD672669AFC2B600B15 /* WidgetSnapshot.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		ED9590643D18E846F5B2AFFC /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = FolioWidgets;
+			target = 1FD9051072DF380C7F01F3F7 /* FolioWidgets */;
+			targetProxy = 1B068CC370021C53A3660AF5 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		AA0000000000000000000008 /* Debug */ = {
@@ -491,14 +622,15 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = FolioFinance/FolioFinance.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 36A6F49Y23;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Folio;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = Folio;
 				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -520,14 +652,15 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = FolioFinance/FolioFinance.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 36A6F49Y23;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Folio;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = Folio;
 				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -544,9 +677,69 @@
 			};
 			name = Release;
 		};
+		AD5CA27044904EA18A03E390 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = FolioWidgets/FolioWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 36A6F49Y23;
+				INFOPLIST_FILE = FolioWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mattboen.foliofinance.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		F7C148728E4EE4521279EBC4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = FolioWidgets/FolioWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 36A6F49Y23;
+				INFOPLIST_FILE = FolioWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mattboen.foliofinance.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		96C21A859E99F24269F41FC6 /* Build configuration list for PBXNativeTarget "FolioWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F7C148728E4EE4521279EBC4 /* Release */,
+				AD5CA27044904EA18A03E390 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		AA0000000000000000000006 /* Build configuration list for PBXProject "FolioFinance" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

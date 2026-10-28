@@ -225,6 +225,8 @@ export const netWorthSnapshots = pgTable(
     totalAssets: numeric("total_assets", { precision: 18, scale: 2 }).notNull(),
     totalLiabilities: numeric("total_liabilities", { precision: 18, scale: 2 }).notNull(),
     netWorth: numeric("net_worth", { precision: 18, scale: 2 }).notNull(),
+    // Investment-account total on that day; null for snapshots taken before this was tracked.
+    invested: numeric("invested", { precision: 18, scale: 2 }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

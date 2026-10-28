@@ -27,6 +27,8 @@ struct NetWorthSnapshot: Decodable, Sendable {
     let netWorth: String
     let totalAssets: String
     let totalLiabilities: String
+    /// Investment-account total that day; absent on older snapshots.
+    let invested: String?
 
     var netWorthDecimal: Decimal { Decimal(string: netWorth) ?? 0 }
     var assetsDecimal: Decimal   { Decimal(string: totalAssets) ?? 0 }

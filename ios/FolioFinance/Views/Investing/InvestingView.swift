@@ -1,4 +1,5 @@
 import SwiftUI
+import Charts
 
 struct InvestingView: View {
     @EnvironmentObject private var auth: AuthManager
@@ -12,6 +13,30 @@ struct InvestingView: View {
     @State private var showAdd = false
     @State private var showConnect = false
     @State private var showAge = false
+    @State private var range: Span = .ytd
+    @State private var points: [Pt] = []
+    @State private var selectedDate: Date?
+
+    /// Daily snapshots, so the shortest range is a month; a day view would have nothing to draw.
+    enum Span: String, CaseIterable, Identifiable {
+        case month = "1M", threeMonths = "3M", ytd = "YTD", year = "1Y", threeYears = "3Y"
+        var id: String { rawValue }
+        var days: Int {
+            switch self {
+            case .month: 30
+            case .threeMonths: 90
+            case .year: 365
+            case .threeYears: 1095
+            case .ytd: min(365, max(7, Calendar.current.ordinality(of: .day, in: .year, for: Date()) ?? 90))
+            }
+        }
+    }
+
+    struct Pt: Identifiable {
+        let id: Int
+        let date: Date
+        let value: Double
+    }
 
     enum InvestingSheet: Identifiable {
         case hero, allocation, account(Account), note(Insights.Note), idea(Idea)
@@ -91,6 +116,7 @@ struct InvestingView: View {
                             emptyState
                         } else if !invested.isEmpty {
                             heroCard.flowIn()
+                            chartCard.flowIn()
                             if let inv = insights?.investing, !inv.allocation.isEmpty { allocationCard(inv).flowIn() }
                             accountsCard.flowIn()
                         }
@@ -123,9 +149,94 @@ struct InvestingView: View {
             .sheet(isPresented: $showAge) { AgeSheet { Task { await load() } } }
         }
         .task { await load() }
+        .onChange(of: range) { _, _ in Task { await loadChart() } }
+    }
+
+    private func loadChart() async {
+        guard let r: NetWorthHistoryResponse = try? await auth.withFreshToken(.netWorthHistory(days: range.days)) else { return }
+        let pts = r.snapshots
+            .compactMap { s -> (Date, Double)? in
+                guard let inv = s.invested, let v = Double(inv), let d = parseDay(s.date) else { return nil }
+                return (d, v)
+            }
+            .sorted { $0.0 < $1.0 }
+            .enumerated().map { Pt(id: $0.offset, date: $0.element.0, value: $0.element.1) }
+        withAnimation(.smooth) { points = pts }
     }
 
     // MARK: Cards
+
+    private var shown: Pt? {
+        guard let last = points.last else { return nil }
+        guard let d = selectedDate else { return last }
+        return points.min { abs($0.date.timeIntervalSince(d)) < abs($1.date.timeIntervalSince(d)) } ?? last
+    }
+
+    private var chartCard: some View {
+        let lo = points.map(\.value).min() ?? 0
+        let hi = points.map(\.value).max() ?? 1
+        let pad = max(1, (hi - lo) * 0.18)
+        let change = (points.last?.value ?? 0) - (points.first?.value ?? 0)
+        return Card {
+            VStack(alignment: .leading, spacing: 12) {
+                Picker("Range", selection: $range) {
+                    ForEach(Span.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+
+                if points.count >= 2, let shown {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(money(shown.value))
+                            .font(.title2.bold()).monospacedDigit()
+                            .contentTransition(.numericText())
+                            .sensitive()
+                        Text(selectedDate != nil
+                             ? shown.date.formatted(.dateTime.month(.wide).day().year())
+                             : "\(change >= 0 ? "Up" : "Down") \(money(abs(change))) over this period")
+                            .font(.caption).foregroundStyle(.secondary).sensitive()
+                    }
+                    Chart {
+                        ForEach(points) { p in
+                            AreaMark(x: .value("Date", p.date), yStart: .value("Base", lo - pad), yEnd: .value("Invested", p.value))
+                                .foregroundStyle(LinearGradient(colors: [Color.purple.opacity(0.30), Color.purple.opacity(0.02)], startPoint: .top, endPoint: .bottom))
+                                .interpolationMethod(.monotone)
+                            LineMark(x: .value("Date", p.date), y: .value("Invested", p.value))
+                                .foregroundStyle(Color.purple)
+                                .lineStyle(StrokeStyle(lineWidth: 2.4, lineCap: .round))
+                                .interpolationMethod(.monotone)
+                        }
+                        if selectedDate != nil {
+                            RuleMark(x: .value("Date", shown.date)).foregroundStyle(.secondary.opacity(0.5))
+                            PointMark(x: .value("Date", shown.date), y: .value("Invested", shown.value))
+                                .foregroundStyle(Color.purple).symbolSize(70)
+                        }
+                    }
+                    .chartXSelection(value: $selectedDate)
+                    .chartYScale(domain: (lo - pad)...(hi + pad))
+                    .chartYAxis {
+                        AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) { v in
+                            AxisGridLine()
+                            AxisValueLabel { if let x = v.as(Double.self) { Text(compactMoney(x)) } }
+                        }
+                    }
+                    .chartXAxis {
+                        AxisMarks(values: .automatic(desiredCount: 3)) { _ in
+                            AxisValueLabel(format: range == .threeYears || range == .year
+                                           ? .dateTime.month(.abbreviated).year(.twoDigits)
+                                           : .dateTime.month(.abbreviated).day())
+                        }
+                    }
+                    .frame(height: 180)
+                    .sensitive()
+                } else {
+                    Label("History builds up daily. Check back soon for your trend line.", systemImage: "clock")
+                        .font(.footnote).foregroundStyle(.secondary)
+                        .padding(.vertical, 8)
+                }
+            }
+        }
+        .sensoryFeedback(.selection, trigger: range)
+    }
 
     private var emptyState: some View {
         VStack(spacing: 12) {
@@ -389,6 +500,7 @@ struct InvestingView: View {
             self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
         if let i: Insights = try? await auth.withFreshToken(.insights) { insights = i }
+        await loadChart()
         isLoading = false
         loaded = true
     }

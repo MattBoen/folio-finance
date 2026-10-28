@@ -1,4 +1,5 @@
 import SwiftUI
+import WidgetKit
 import Charts
 
 struct OverviewView: View {
@@ -349,6 +350,25 @@ struct OverviewView: View {
         }
         isLoading = false
         loaded = true
+        publishWidgetSnapshot()
+    }
+
+    /// Leaves a small summary where the home-screen widgets can read it.
+    private func publishWidgetSnapshot() {
+        guard !visible.isEmpty else { return }
+        let series = points.map(\.value)
+        WidgetSnapshot(
+            netWorth: netWorth,
+            change: (series.last ?? 0) - (series.first ?? 0),
+            changeLabel: range.label.replacingOccurrences(of: "so far ", with: ""),
+            series: Array(series.suffix(40)),
+            spent: spentThisMonth, income: earnedThisMonth,
+            budgetTotal: budgets.reduce(0) { $0 + $1.monthlyAmount },
+            budgetSpent: budgets.reduce(0) { $0 + $1.spent },
+            hideAmounts: UserDefaults.standard.bool(forKey: "hideAmounts"),
+            updated: Date()
+        ).save()
+        WidgetCenter.shared.reloadAllTimelines()
     }
 
     private func loadChart() async {

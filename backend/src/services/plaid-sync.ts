@@ -207,6 +207,7 @@ export async function takeNetWorthSnapshot(userId: string): Promise<void> {
 
   let totalAssets = 0;
   let totalLiabilities = 0;
+  let invested = 0;
 
   for (const acct of userAccounts) {
     const bal = parseFloat(acct.balanceCurrent ?? "0");
@@ -214,6 +215,7 @@ export async function takeNetWorthSnapshot(userId: string): Promise<void> {
       totalLiabilities += bal;
     } else {
       totalAssets += bal;
+      if (acct.type === "investment") invested += bal;
     }
   }
 
@@ -227,6 +229,7 @@ export async function takeNetWorthSnapshot(userId: string): Promise<void> {
       totalAssets: totalAssets.toFixed(2),
       totalLiabilities: totalLiabilities.toFixed(2),
       netWorth: (totalAssets - totalLiabilities).toFixed(2),
+      invested: invested.toFixed(2),
     })
     .onConflictDoUpdate({
       target: [netWorthSnapshots.userId, netWorthSnapshots.date],
@@ -234,6 +237,7 @@ export async function takeNetWorthSnapshot(userId: string): Promise<void> {
         totalAssets: totalAssets.toFixed(2),
         totalLiabilities: totalLiabilities.toFixed(2),
         netWorth: (totalAssets - totalLiabilities).toFixed(2),
+        invested: invested.toFixed(2),
       },
     });
 }

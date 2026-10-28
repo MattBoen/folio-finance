@@ -116,6 +116,7 @@ final class AuthManager: ObservableObject {
     }
 
     func logout() {
+        WidgetSnapshot.clear()
         accessToken = nil
         refreshToken = nil
         isDemo = false
@@ -363,7 +364,8 @@ enum DemoData {
         let now = Date()
         return (0..<days).map { i in
             let date = Calendar.current.date(byAdding: .day, value: -i, to: now) ?? now
-            let growth = 0.90 + 0.10 * (1 - Double(i) / 365)
+            let growth = max(0.5, 0.90 + 0.10 * (1 - Double(i) / 365))
+            let invested = 103_791.0 * max(0.4, 0.55 + 0.45 * (1 - Double(i) / 1095)) + sin(Double(i) * 0.13) * 900
             let nw = 129_127.29 * growth + sin(Double(i) * 0.09) * 380 + sin(Double(i) * 0.61) * 140
             let liabilities = 12_484.10 + Double(i) * 8
             return [
@@ -371,6 +373,7 @@ enum DemoData {
                 "net_worth": String(format: "%.2f", nw),
                 "total_assets": String(format: "%.2f", nw + liabilities),
                 "total_liabilities": String(format: "%.2f", liabilities),
+                "invested": String(format: "%.2f", invested),
             ]
         }
     }

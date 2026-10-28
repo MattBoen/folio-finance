@@ -169,7 +169,7 @@ router.patch(
 router.get(
   "/net-worth/history",
   requireAuth,
-  zValidator("query", z.object({ days: z.coerce.number().int().min(7).max(365).default(90) })),
+  zValidator("query", z.object({ days: z.coerce.number().int().min(7).max(1095).default(90) })),
   async (c) => {
     const { userId } = c.get("auth");
     const { days } = c.req.valid("query");
@@ -184,6 +184,7 @@ router.get(
         netWorth: netWorthSnapshots.netWorth,
         totalAssets: netWorthSnapshots.totalAssets,
         totalLiabilities: netWorthSnapshots.totalLiabilities,
+        invested: netWorthSnapshots.invested,
       })
       .from(netWorthSnapshots)
       .where(and(eq(netWorthSnapshots.userId, userId), gte(netWorthSnapshots.date, sinceDate)))
