@@ -155,8 +155,16 @@ struct AuthResponse: Decodable, Sendable {
 enum DemoData {
     static func respond<T: Decodable>(to endpoint: Endpoint) throws -> T {
         if endpoint.path == "/vehicles/lookup" {
-            let v: [String: Any] = ["vin": "1HGCV1F30MA000000", "year": 2021, "make": "Honda", "model": "Accord", "trim": "Sport", "miles": 41200,
-                                    "estimatedValue": 22400, "lowValue": 20200, "highValue": 24600, "source": "estimate"]
+            let v: [String: Any] = ["vin": "1FMEE5DH2PLA12345", "year": 2023, "make": "Ford", "model": "Bronco",
+                                    "trims": ["Base", "Big Bend", "Black Diamond", "Outer Banks", "Badlands", "Wildtrak", "Everglades"],
+                                    "details": "4-door SUV · 2.3L 4-cyl · AWD", "miles": 41200, "annualMiles": 10800, "ageYears": 3.8,
+                                    "estimatedValue": 38200, "lowValue": 34400, "highValue": 42000, "source": "estimate"]
+            let data = try JSONSerialization.data(withJSONObject: v)
+            let decoder = JSONDecoder(); decoder.keyDecodingStrategy = .convertFromSnakeCase
+            return try decoder.decode(T.self, from: data)
+        }
+        if endpoint.path == "/vehicles/estimate" {
+            let v: [String: Any] = ["estimatedValue": 40100, "lowValue": 36100, "highValue": 44100, "source": "estimate", "annualMiles": 10800, "ageYears": 3.8]
             let data = try JSONSerialization.data(withJSONObject: v)
             let decoder = JSONDecoder(); decoder.keyDecodingStrategy = .convertFromSnakeCase
             return try decoder.decode(T.self, from: data)

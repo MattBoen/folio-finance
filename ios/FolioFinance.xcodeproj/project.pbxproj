@@ -28,6 +28,7 @@
 		AA0000000000000000000103 /* PlanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000102 /* PlanView.swift */; };
 		AA0000000000000000000105 /* Insights.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000104 /* Insights.swift */; };
 		AA0000000000000000000108 /* OnboardingFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000107 /* OnboardingFlow.swift */; };
+		AA000000000000000000010B /* CarEntryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000010A /* CarEntryView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -52,6 +53,7 @@
 		AA0000000000000000000102 /* PlanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanView.swift; sourceTree = "<group>"; };
 		AA0000000000000000000104 /* Insights.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Insights.swift; sourceTree = "<group>"; };
 		AA0000000000000000000107 /* OnboardingFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFlow.swift; sourceTree = "<group>"; };
+		AA000000000000000000010A /* CarEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarEntryView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -128,6 +130,7 @@
 		AA0000000000000000000035 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				AA0000000000000000000109 /* Vehicle */,
 				AA0000000000000000000106 /* Onboarding */,
 				AA0000000000000000000101 /* Plan */,
 				AA000000000000000000002F /* Theme.swift */,
@@ -205,6 +208,14 @@
 			path = Onboarding;
 			sourceTree = "<group>";
 		};
+		AA0000000000000000000109 /* Vehicle */ = {
+			isa = PBXGroup;
+			children = (
+				AA000000000000000000010A /* CarEntryView.swift */,
+			);
+			path = Vehicle;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -280,6 +291,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AA000000000000000000010B /* CarEntryView.swift in Sources */,
 				AA0000000000000000000108 /* OnboardingFlow.swift in Sources */,
 				AA0000000000000000000105 /* Insights.swift in Sources */,
 				AA0000000000000000000103 /* PlanView.swift in Sources */,

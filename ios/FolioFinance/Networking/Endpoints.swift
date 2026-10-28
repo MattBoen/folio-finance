@@ -197,12 +197,22 @@ extension Endpoint {
         return .post("/vehicles/lookup", body: Body(vin: vin, miles: miles))
     }
 
-    static func createVehicle(_ v: VehicleLookup, value: Double) -> Endpoint {
+    static func vehicleEstimate(year: Int, make: String, model: String, trim: String?, miles: Int, vin: String? = nil) -> Endpoint {
+        struct Body: Encodable { let year: Int; let make: String; let model: String; let trim: String?; let miles: Int; let vin: String? }
+        return .post("/vehicles/estimate", body: Body(year: year, make: make, model: model, trim: trim, miles: miles, vin: vin))
+    }
+
+    static func vehicleTrims(year: Int, make: String, model: String) -> Endpoint {
+        func enc(_ v: String) -> String { v.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? v }
+        return .get("/vehicles/trims?year=\(year)&make=\(enc(make))&model=\(enc(model))")
+    }
+
+    static func createVehicle(vin: String?, year: Int, make: String, model: String, trim: String?, miles: Int, value: Double) -> Endpoint {
         struct Body: Encodable {
-            let vin: String; let year: Int; let make: String; let model: String
+            let vin: String?; let year: Int; let make: String; let model: String
             let trim: String?; let miles: Int; let value: Double
         }
-        return .post("/vehicles", body: Body(vin: v.vin, year: v.year, make: v.make, model: v.model, trim: v.trim, miles: v.miles, value: value))
+        return .post("/vehicles", body: Body(vin: vin, year: year, make: make, model: model, trim: trim, miles: miles, value: value))
     }
 
     static func updateVehicle(accountId: String, miles: Int, value: Double) -> Endpoint {

@@ -220,102 +220,18 @@ private struct ConnectStep: View {
 
 private struct CarStep: View {
     let next: () -> Void
-    @EnvironmentObject private var auth: AuthManager
-    @State private var vin = ""
-    @State private var miles = ""
-    @State private var lookup: VehicleLookup?
-    @State private var valueText = ""
-    @State private var busy = false
-    @State private var saved = false
-    @State private var error: String?
-
-    private var validVIN: Bool { vin.count == 17 }
+    @State private var added = 0
 
     var body: some View {
-        StepScaffold(title: "Add your car", subtitle: "Optional. Enter the VIN and mileage and Folio estimates what it's worth. It counts toward your net worth.") {
-            VStack(spacing: 14) {
-                if saved, let lookup {
-                    Card {
-                        HStack(spacing: 12) {
-                            IconBadge(symbol: "checkmark", color: .green, size: 38)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(lookup.title).font(.headline)
-                                Text("Added at \(money(Double(valueText) ?? lookup.estimatedValue))").font(.subheadline).foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                } else {
-                    Card(padding: 0) {
-                        VStack(spacing: 0) {
-                            TextField("VIN (17 characters)", text: $vin)
-                                .textInputAutocapitalization(.characters).autocorrectionDisabled()
-                                .font(.body.monospaced())
-                                .onChange(of: vin) { _, v in
-                                    let cleaned = String(v.uppercased().filter { $0.isLetter || $0.isNumber }.prefix(17))
-                                    if cleaned != v { vin = cleaned }
-                                    lookup = nil
-                                }
-                                .padding(16)
-                            Divider().padding(.leading, 16)
-                            TextField("Mileage", text: $miles).keyboardType(.numberPad).padding(16)
-                        }
-                    }
-                    Text("Find the VIN on the driver's side of the dashboard, the door jamb, or your insurance card.")
-                        .font(.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
-
-                    if let lookup {
-                        Card {
-                            VStack(alignment: .leading, spacing: 12) {
-                                Text(lookup.title).font(.headline)
-                                if let trim = lookup.trim, !trim.isEmpty { Text(trim).font(.subheadline).foregroundStyle(.secondary) }
-                                Divider()
-                                Text("Estimated value").font(.subheadline).foregroundStyle(.secondary)
-                                HStack {
-                                    Text("$").font(.title2.bold()).foregroundStyle(.secondary)
-                                    TextField("0", text: $valueText).keyboardType(.numberPad).font(.system(size: 30, weight: .bold, design: .rounded))
-                                }
-                                Text("Typical range \(money(lookup.lowValue)) to \(money(lookup.highValue)). \(lookup.source == "estimate" ? "This is an estimate based on age and mileage." : "Based on recent market listings.") Edit it any time.")
-                                    .font(.footnote).foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                    if let error { Text(error).font(.footnote).foregroundStyle(.red).frame(maxWidth: .infinity, alignment: .leading) }
-                }
-            }
+        StepScaffold(title: "Add your car", subtitle: "Optional. Look it up by VIN or enter the details yourself. It counts toward your net worth.") {
+            CarEntryView { _ in added += 1 }
         } footer: {
-            if saved {
+            if added > 0 {
                 PrimaryButton(title: "Continue", action: next)
-            } else if lookup != nil {
-                PrimaryButton(title: "Add to my accounts", loading: busy) { Task { await save() } }
-                Button("Skip", action: next).font(.subheadline)
             } else {
-                PrimaryButton(title: "Look up value", loading: busy) { Task { await find() } }
-                    .disabled(!validVIN || Int(miles) == nil)
                 Button("Skip for now", action: next).font(.subheadline)
             }
         }
-    }
-
-    private func find() async {
-        guard let m = Int(miles) else { return }
-        busy = true; error = nil
-        do {
-            let r: VehicleLookup = try await auth.withFreshToken(.vehicleLookup(vin: vin, miles: m))
-            lookup = r
-            valueText = String(Int(r.estimatedValue.rounded()))
-        } catch { self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription }
-        busy = false
-    }
-
-    private func save() async {
-        guard let lookup, let v = Double(valueText) else { return }
-        busy = true; error = nil
-        do {
-            let _: AccountResponse = try await auth.withFreshToken(.createVehicle(lookup, value: v))
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
-            saved = true
-        } catch { self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription }
-        busy = false
     }
 }
 

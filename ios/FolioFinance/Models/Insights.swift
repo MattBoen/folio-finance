@@ -95,16 +95,33 @@ struct BudgetLine: Decodable, Identifiable, Sendable {
 }
 
 struct VehicleLookup: Decodable, Sendable {
-    let vin: String
+    let vin: String?
     let year: Int
     let make: String
     let model: String
     let trim: String?
+    let trims: [String]?
+    let details: String?
     let miles: Int
+    let annualMiles: Double?
+    let ageYears: Double?
     let estimatedValue: Double
     let lowValue: Double
     let highValue: Double
     let source: String            // "estimate" | provider name
 
     var title: String { [String(year), make, model].joined(separator: " ") }
+}
+
+struct VehicleEstimate: Decodable, Sendable {
+    let estimatedValue: Double
+    let lowValue: Double
+    let highValue: Double
+    let source: String
+    let annualMiles: Double?
+    let ageYears: Double?
+}
+
+struct TrimsResponse: Decodable, Sendable {
+    let trims: [String]
 }

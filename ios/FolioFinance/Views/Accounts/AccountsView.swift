@@ -8,6 +8,7 @@ struct AccountsView: View {
     @State private var error: String?
     @State private var showAdd = false
     @State private var showConnect = false
+    @State private var showCar = false
     @State private var editing: Account?
     @State private var deleting: Account?
 
@@ -70,6 +71,7 @@ struct AccountsView: View {
                     Menu {
                         Button { showAdd = true } label: { Label("Add account", systemImage: "plus") }
                         Button { showConnect = true } label: { Label("Connect a bank", systemImage: "link") }
+                        Button { showCar = true } label: { Label("Add a car", systemImage: "car.fill") }
                     } label: {
                         Image(systemName: "plus")
                     }
@@ -77,6 +79,7 @@ struct AccountsView: View {
             }
             .sheet(isPresented: $showAdd) { AddAccountSheet { Task { await load() } } }
             .sheet(isPresented: $showConnect) { PlaidLinkSheet() }
+            .sheet(isPresented: $showCar, onDismiss: { Task { await load() } }) { AddCarSheet { Task { await load() } } }
             .sheet(item: $editing) { a in EditAccountSheet(account: a) { Task { await load() } } }
             .confirmationDialog(
                 "Delete \(deleting?.name ?? "account")?",
