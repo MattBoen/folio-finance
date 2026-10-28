@@ -79,6 +79,9 @@ struct TransactionDetailView: View {
     @State private var busy = false
     @State private var message: String?
     @State private var confirmDelete = false
+    @State private var incomeRows: [Transaction] = []
+
+    private var isIncome: Bool { !transaction.isDebit }
 
     init(transaction: Transaction, all: [Transaction] = [], onChanged: @escaping () -> Void = {}) {
         self.transaction = transaction
@@ -103,9 +106,9 @@ struct TransactionDetailView: View {
                 ScrollView {
                     VStack(spacing: 14) {
                         header
-                        mapCard
+                        if isIncome { incomeCard } else { mapCard }
                         detailsCard
-                        merchantCard
+                        if !isIncome { merchantCard }
                         actionsCard
                     }
                     .padding(.horizontal, 16)
@@ -121,7 +124,9 @@ struct TransactionDetailView: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
-        .task { await locate() }
+        .task {
+            if isIncome { await loadIncomeHistory() } else { await locate() }
+        }
     }
 
     // MARK: Header
@@ -215,6 +220,114 @@ struct TransactionDetailView: View {
         }
         .font(.subheadline)
         .padding(.horizontal, 16).padding(.vertical, 12)
+    }
+
+    // MARK: Income overview
+
+    private var sourceRows: [Transaction] {
+        let source = incomeRows.isEmpty ? all : incomeRows
+        let rows = source.filter { $0.merchantKey == transaction.merchantKey && !$0.isDebit }
+        let merged = rows.contains(where: { $0.id == transaction.id }) ? rows : rows + [transaction]
+        return merged.sorted { $0.date < $1.date }
+    }
+
+    private struct Cadence { let name: String; let gapDays: Double?; let perMonth: Double? }
+
+    private func cadence(_ rows: [Transaction]) -> Cadence {
+        let dates = rows.compactMap { parseDay($0.date) }.sorted()
+        guard dates.count >= 2 else { return Cadence(name: "One deposit so far", gapDays: nil, perMonth: nil) }
+        let gaps = zip(dates, dates.dropFirst()).map { $1.timeIntervalSince($0) / 86_400 }.sorted()
+        let median = gaps[gaps.count / 2]
+        switch median {
+        case 5...9: return Cadence(name: "Weekly", gapDays: median, perMonth: 52.0 / 12)
+        case 12...16: return Cadence(name: "Every two weeks", gapDays: median, perMonth: 26.0 / 12)
+        case 28...33: return Cadence(name: "Monthly", gapDays: median, perMonth: 1)
+        case 10..<12, 16..<20: return Cadence(name: "Twice a month", gapDays: median, perMonth: 2)
+        default: return Cadence(name: "Irregular", gapDays: median, perMonth: nil)
+        }
+    }
+
+    @ViewBuilder private var incomeCard: some View {
+        let rows = sourceRows
+        let cutoff = Calendar.current.date(byAdding: .month, value: -12, to: Date()) ?? Date()
+        let last12 = rows.filter { (parseDay($0.date) ?? .distantPast) >= cutoff }
+        let yearStart = Calendar.current.date(from: Calendar.current.dateComponents([.year], from: Date())) ?? Date()
+        let ytd = rows.filter { (parseDay($0.date) ?? .distantPast) >= yearStart }
+        let total12 = last12.reduce(0) { $0 + abs($1.doubleAmount) }
+        let totalYTD = ytd.reduce(0) { $0 + abs($1.doubleAmount) }
+        let avg = last12.isEmpty ? 0 : total12 / Double(last12.count)
+        let cad = cadence(rows)
+        let months = monthly(last12)
+        let latest = rows.last
+        VStack(spacing: 8) {
+            SectionTitle("Income from \(transaction.displayName)")
+            Card {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(alignment: .top) {
+                        bigStat("This year", money(totalYTD))
+                        Divider().frame(height: 40)
+                        bigStat("Last 12 months", money(total12))
+                    }
+                    if months.count > 1 {
+                        Chart(months, id: \.key) { m in
+                            BarMark(x: .value("Month", m.label), y: .value("Received", m.total))
+                                .foregroundStyle(LinearGradient(colors: [Color.up, Color.up.opacity(0.55)], startPoint: .top, endPoint: .bottom))
+                                .cornerRadius(5)
+                        }
+                        .chartYAxis(.hidden)
+                        .frame(height: 120)
+                        .sensitive()
+                    }
+                    VStack(spacing: 10) {
+                        stat("Deposits", "\(last12.count)")
+                        stat("Average deposit", money(avg, cents: true))
+                        if let latest { stat("Most recent", "\(money(abs(latest.doubleAmount), cents: true)) · \(shortDay(latest.date))") }
+                        stat("How often", cad.name)
+                        if let per = cad.perMonth, avg > 0 { stat("Estimated per month", money(avg * per)) }
+                    }
+                    if let gap = cad.gapDays, cad.perMonth != nil, let last = latest.flatMap({ parseDay($0.date) }),
+                       let next = Calendar.current.date(byAdding: .day, value: Int(gap.rounded()), to: last) {
+                        Label("Next deposit around \(next.formatted(.dateTime.month(.abbreviated).day()))", systemImage: "calendar")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(Color.up)
+                    }
+                }
+            }
+            Card(padding: 0) {
+                VStack(spacing: 0) {
+                    ForEach(Array(rows.suffix(6).reversed()), id: \.id) { t in
+                        HStack {
+                            Text(shortDay(t.date)).foregroundStyle(.secondary)
+                            Spacer()
+                            Text("+" + money(abs(t.doubleAmount), cents: true)).fontWeight(.semibold).monospacedDigit().foregroundStyle(Color.up).sensitive()
+                        }
+                        .font(.subheadline)
+                        .padding(.horizontal, 16).padding(.vertical, 11)
+                        if t.id != rows.suffix(6).reversed().last?.id { Divider().padding(.leading, 16) }
+                    }
+                }
+            }
+        }
+    }
+
+    private func bigStat(_ title: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(value).font(.title2.bold()).monospacedDigit().minimumScaleFactor(0.7).lineLimit(1).sensitive()
+            Text(title).font(.caption).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func shortDay(_ s: String) -> String {
+        parseDay(s)?.formatted(.dateTime.month(.abbreviated).day().year()) ?? s
+    }
+
+    private func loadIncomeHistory() async {
+        let to = Date()
+        let from = Calendar.current.date(byAdding: .month, value: -12, to: to) ?? to
+        if let r: TransactionsResponse = try? await auth.withFreshToken(.transactions(from: dayString(from), to: dayString(to), limit: 500)) {
+            withAnimation(.smooth) { incomeRows = r.transactions }
+        }
     }
 
     // MARK: Merchant history

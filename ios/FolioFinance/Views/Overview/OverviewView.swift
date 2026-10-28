@@ -5,13 +5,15 @@ struct OverviewView: View {
     @EnvironmentObject private var auth: AuthManager
     @State private var accounts: [Account] = []
     @State private var points: [Pt] = []
-    @State private var range: Span = .threeMonths
-    @State private var showBreakdown = false
+    @State private var monthTxns: [Transaction] = []
+    @State private var budgets: [BudgetLine] = []
+    @State private var range: Span = .ytd
     @State private var isLoading = false
     @State private var loaded = false
     @State private var error: String?
     @State private var selectedDate: Date?
     @State private var showAddAccount = false
+    @State private var detail: Transaction?
 
     enum Span: String, CaseIterable, Identifiable {
         case month = "1M", threeMonths = "3M", ytd = "YTD", year = "1Y"
@@ -42,15 +44,19 @@ struct OverviewView: View {
         visible.filter { $0.group == g }.reduce(0) { $0 + NSDecimalNumber(decimal: $1.currentBalance).doubleValue }
     }
 
+    private func accounts(in g: AccountGroup) -> [Account] {
+        visible.filter { $0.group == g }.sorted { $0.currentBalance > $1.currentBalance }
+    }
+
     private var assets: Double { AccountGroup.allCases.filter { !$0.isLiability }.reduce(0) { $0 + total($1) } }
     private var liabilities: Double { AccountGroup.allCases.filter(\.isLiability).reduce(0) { $0 + total($1) } }
     private var netWorth: Double { assets - liabilities }
 
-    private var rangeLabel: String { range.label }
-
-    private func accounts(in g: AccountGroup) -> [Account] {
-        visible.filter { $0.group == g }.sorted { $0.currentBalance > $1.currentBalance }
+    private var counted: [Transaction] {
+        monthTxns.filter { !$0.isExcluded && !$0.category.lowercased().contains("transfer") }
     }
+    private var spentThisMonth: Double { counted.filter(\.isDebit).reduce(0) { $0 + $1.doubleAmount } }
+    private var earnedThisMonth: Double { counted.filter { !$0.isDebit }.reduce(0) { $0 + abs($1.doubleAmount) } }
 
     var body: some View {
         NavigationStack {
@@ -59,15 +65,7 @@ struct OverviewView: View {
                 ScrollView {
                     VStack(spacing: 14) {
                         if let error { ErrorBanner(message: error) { Task { await load() } } }
-                        Button {
-                            withAnimation(.smooth(duration: 0.45)) { showBreakdown.toggle() }
-                        } label: { hero }
-                        .buttonStyle(PressableCardStyle())
-                        .sensoryFeedback(.selection, trigger: showBreakdown)
-                        if showBreakdown && !visible.isEmpty {
-                            BreakdownCard(netWorth: netWorth, assets: assets, liabilities: liabilities, groups: AccountGroup.allCases.map { ($0, total($0), accounts(in: $0)) })
-                                .transition(.asymmetric(insertion: .scale(scale: 0.96, anchor: .top).combined(with: .opacity), removal: .opacity))
-                        }
+                        hero
                         if loaded && visible.isEmpty {
                             EmptyStateCard(
                                 symbol: "plus.circle.fill",
@@ -81,6 +79,9 @@ struct OverviewView: View {
                             .buttonStyle(.borderedProminent).controlSize(.large)
                         } else if !visible.isEmpty {
                             chartCard.flowIn()
+                            thisMonthCard.flowIn()
+                            if !budgets.isEmpty { budgetCard.flowIn() }
+                            recentCard.flowIn()
                             CompositionCard(title: "Assets", total: assets, rows: AccountGroup.allCases.filter { !$0.isLiability }.map { ($0, total($0), accounts(in: $0)) }).flowIn()
                             if liabilities > 0 {
                                 CompositionCard(title: "Liabilities", total: liabilities, rows: AccountGroup.allCases.filter(\.isLiability).map { ($0, total($0), accounts(in: $0)) }).flowIn()
@@ -98,6 +99,9 @@ struct OverviewView: View {
             .navigationTitle("Overview")
             .toolbar { ToolbarItem(placement: .topBarTrailing) { ProfileMenu() } }
             .sheet(isPresented: $showAddAccount) { AddAccountSheet { Task { await load() } } }
+            .sheet(item: $detail) { t in
+                TransactionDetailView(transaction: t, all: monthTxns) { Task { await load() } }
+            }
         }
         .task { await load() }
         .onChange(of: range) { Task { await loadChart() } }
@@ -108,12 +112,7 @@ struct OverviewView: View {
     private var hero: some View {
         let delta: Double? = points.count >= 2 ? (points.last!.value - points.first!.value) : nil
         return VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text("Net worth").font(.subheadline.weight(.semibold)).opacity(0.85)
-                Spacer()
-                Image(systemName: "chevron.down").font(.footnote.weight(.bold)).opacity(0.8)
-                    .rotationEffect(.degrees(showBreakdown ? 180 : 0))
-            }
+            Text("Net worth").font(.subheadline.weight(.semibold)).opacity(0.85)
             Text(money(netWorth))
                 .font(.system(size: 44, weight: .bold, design: .rounded))
                 .monospacedDigit()
@@ -122,7 +121,7 @@ struct OverviewView: View {
                 .contentTransition(.numericText())
                 .sensitive()
             if let delta {
-                Label("\(signedMoney(delta)) \(rangeLabel)", systemImage: delta >= 0 ? "arrow.up.right" : "arrow.down.right")
+                Label("\(signedMoney(delta)) \(range.label)", systemImage: delta >= 0 ? "arrow.up.right" : "arrow.down.right")
                     .font(.footnote.weight(.semibold))
                     .opacity(0.95)
                     .sensitive()
@@ -215,6 +214,93 @@ struct OverviewView: View {
         }
     }
 
+    // MARK: This month
+
+    private var thisMonthCard: some View {
+        let net = earnedThisMonth - spentThisMonth
+        let top = max(earnedThisMonth, spentThisMonth, 1)
+        return Card {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    Text(Date().formatted(.dateTime.month(.wide))).font(.headline)
+                    Spacer()
+                    Text(net >= 0 ? "\(money(net)) ahead" : "\(money(-net)) over")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(net >= 0 ? Color.up : Color.down)
+                        .sensitive()
+                }
+                monthBar("Income", earnedThisMonth, top, .up)
+                monthBar("Spent", spentThisMonth, top, Color(hex: 0x5E5CE6))
+            }
+        }
+    }
+
+    private func monthBar(_ label: String, _ value: Double, _ top: Double, _ color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Text(label).font(.subheadline).foregroundStyle(.secondary)
+                Spacer()
+                Text(money(value)).font(.subheadline.weight(.semibold)).monospacedDigit().sensitive()
+            }
+            ProgressBar(fraction: value / top, color: color)
+        }
+    }
+
+    // MARK: Budget glance
+
+    private var budgetCard: some View {
+        let total = budgets.reduce(0) { $0 + $1.monthlyAmount }
+        let spent = budgets.reduce(0) { $0 + $1.spent }
+        let tight = budgets.filter { $0.monthlyAmount > 0 }.sorted { $0.spent / $0.monthlyAmount > $1.spent / $1.monthlyAmount }.prefix(3)
+        return Card {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Budget").font(.headline)
+                    Spacer()
+                    Text(spent > total ? "\(money(spent - total)) over" : "\(money(total - spent)) left")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(spent > total ? Color.down : .primary)
+                        .sensitive()
+                }
+                ProgressBar(fraction: total > 0 ? spent / total : 0, color: spent > total ? .red : spent / max(total, 1) > 0.85 ? .orange : .green)
+                ForEach(Array(tight)) { b in
+                    HStack {
+                        Text(b.category).font(.subheadline)
+                        Spacer()
+                        Text("\(money(b.spent)) of \(money(b.monthlyAmount))")
+                            .font(.caption).foregroundStyle(b.spent > b.monthlyAmount ? Color.down : .secondary).monospacedDigit().sensitive()
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: Recent activity
+
+    private var recentCard: some View {
+        let recent = monthTxns.sorted { $0.date > $1.date }.prefix(5)
+        return VStack(spacing: 8) {
+            SectionTitle("Recent activity")
+            if recent.isEmpty {
+                Card { Text("Nothing yet this month.").font(.subheadline).foregroundStyle(.secondary) }
+            } else {
+                Card(padding: 0) {
+                    VStack(spacing: 0) {
+                        ForEach(Array(recent)) { t in
+                            Button { detail = t } label: {
+                                TransactionRow(transaction: t)
+                                    .padding(.horizontal, 16).padding(.vertical, 10)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            if t.id != recent.last?.id { Divider().padding(.leading, 66) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: Loading
 
     private func load() async {
@@ -226,9 +312,17 @@ struct OverviewView: View {
         } catch {
             self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
-        // The trend chart is optional: accounts still show if history can't load.
+        // Everything below is optional: accounts still show if any of it can't load.
         if let c: NetWorthHistoryResponse = try? await auth.withFreshToken(.netWorthHistory(days: range.days)) {
             points = Self.makePoints(c)
+        }
+        let now = Date()
+        let start = Calendar.current.date(from: Calendar.current.dateComponents([.year, .month], from: now)) ?? now
+        if let t: TransactionsResponse = try? await auth.withFreshToken(.transactions(from: dayString(start), to: dayString(now), limit: 500)) {
+            monthTxns = t.transactions
+        }
+        if let b: BudgetsResponse = try? await auth.withFreshToken(.budgets) {
+            budgets = b.budgets
         }
         isLoading = false
         loaded = true
@@ -343,83 +437,6 @@ struct CompositionCard: View {
                     }
                 }
                 .sensoryFeedback(.selection, trigger: open)
-            }
-        }
-    }
-}
-
-// MARK: - What goes into net worth (assets and liabilities, each expandable down to accounts)
-
-struct BreakdownCard: View {
-    let netWorth: Double
-    let assets: Double
-    let liabilities: Double
-    let groups: [(AccountGroup, Double, [Account])]
-
-    @State private var side: Side?
-    @State private var group: AccountGroup?
-    private enum Side { case assets, liabilities }
-
-    var body: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("What makes up your net worth").font(.headline)
-                sideRow("Assets", assets, .assets, color: .up)
-                sideRow("Liabilities", liabilities, .liabilities, color: .down, negative: true)
-                Divider()
-                HStack {
-                    Text("Net worth").font(.subheadline.weight(.semibold))
-                    Spacer()
-                    Text(money(netWorth)).font(.title3.bold()).monospacedDigit().sensitive()
-                }
-            }
-        }
-        .sensoryFeedback(.selection, trigger: side)
-        .sensoryFeedback(.selection, trigger: group)
-    }
-
-    @ViewBuilder private func sideRow(_ title: String, _ value: Double, _ s: Side, color: Color, negative: Bool = false) -> some View {
-        let rows = groups.filter { ($0.0.isLiability == (s == .liabilities)) && $0.1 > 0 }
-        VStack(spacing: 8) {
-            Button {
-                withAnimation(.smooth(duration: 0.4)) { side = side == s ? nil : s; group = nil }
-            } label: {
-                HStack {
-                    Circle().fill(color).frame(width: 9, height: 9)
-                    Text(title).font(.body)
-                    Spacer()
-                    Text((negative ? "−" : "+") + money(value)).font(.body.weight(.semibold)).monospacedDigit().sensitive()
-                    Image(systemName: "chevron.right").font(.caption2.weight(.bold)).foregroundStyle(.tertiary)
-                        .rotationEffect(.degrees(side == s ? 90 : 0))
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            if side == s {
-                VStack(spacing: 10) {
-                    ForEach(rows, id: \.0.id) { g, v, accts in
-                        VStack(spacing: 4) {
-                            Button {
-                                withAnimation(.smooth(duration: 0.4)) { group = group == g ? nil : g }
-                            } label: {
-                                HStack(spacing: 10) {
-                                    IconBadge(symbol: g.symbol, color: g.color, size: 26)
-                                    Text(g.rawValue).font(.subheadline)
-                                    Spacer()
-                                    Text(money(v)).font(.subheadline).monospacedDigit().sensitive()
-                                    Image(systemName: "chevron.right").font(.caption2.weight(.bold)).foregroundStyle(.tertiary)
-                                        .rotationEffect(.degrees(group == g ? 90 : 0))
-                                }
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            if group == g { AccountLines(accounts: accts).transition(.opacity.combined(with: .move(edge: .top))) }
-                        }
-                    }
-                }
-                .padding(.leading, 18)
-                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
     }

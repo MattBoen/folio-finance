@@ -26,6 +26,8 @@ struct CarEntryView: View {
     @State private var found = false
     @State private var busy = false
     @State private var estimating = false
+    @State private var estimateNote: String?
+    @State private var lastEstimateTrim = ""
     @State private var saved: [String] = []
     @State private var error: String?
 
@@ -141,6 +143,7 @@ struct CarEntryView: View {
                         TextField("0", text: $draft.value).keyboardType(.numberPad)
                             .font(.system(size: 30, weight: .bold, design: .rounded))
                     }
+                    if let estimateNote { Text(estimateNote).font(.footnote).foregroundStyle(.orange) }
                     if let r = draft.range {
                         Text("Typical range \(money(r.low)) to \(money(r.high)). \(draft.source == "estimate" ? "An estimate from age, mileage and trim." : "Based on recent market listings.") Edit it any time.")
                             .font(.footnote).foregroundStyle(.secondary)
@@ -227,6 +230,8 @@ struct CarEntryView: View {
                           miles: String(miles), value: String(Int(r.estimatedValue.rounded())), details: r.details,
                           range: (r.lowValue, r.highValue), source: r.source)
             trimOptions = candidates
+            lastEstimateTrim = draft.trim
+            estimateNote = nil
             found = true
         } catch { self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription }
         busy = false
@@ -244,18 +249,45 @@ struct CarEntryView: View {
         await reestimate()
     }
 
+    /// Rough trim ladder used only when the server can't recalculate (for example, an older server without trim-aware pricing).
+    private static func trimFactor(_ trim: String) -> Double {
+        let t = trim.lowercased()
+        if t.isEmpty { return 1.1 }
+        let top = ["badlands", "wildtrak", "everglades", "platinum", "raptor", "denali", "king ranch", "rubicon", "trd pro", "trailhawk", "summit", "sahara", "type r", "amg"]
+        let upper = ["outer banks", "limited", "touring", "sel", "titanium", "lariat", "premium", "black diamond", "laredo", "overland"]
+        let mid = ["big bend", "sport", "le", "xlt", "ex", "latitude", "preferred"]
+        if top.contains(where: t.contains) { return 1.35 }
+        if upper.contains(where: t.contains) { return 1.2 }
+        if mid.contains(where: t.contains) { return 1.1 }
+        if ["base", "standard", "xl", "lx", "se", "work"].contains(where: { t == $0 || t.hasPrefix($0 + " ") }) { return 1.0 }
+        return 1.1
+    }
+
     private func reestimate(delay: Bool = false) async {
         guard detailsReady, let y = yearValue, let m = milesValue else { return }
         if delay { try? await Task.sleep(for: .milliseconds(700)); if Task.isCancelled { return } }
         estimating = true
-        if let r: VehicleEstimate = try? await auth.withFreshToken(.vehicleEstimate(
-            year: y, make: draft.make, model: draft.model, trim: draft.trim.isEmpty ? nil : draft.trim, miles: m, vin: draft.vin
-        )) {
+        defer { estimating = false }
+        let previousTrim = lastEstimateTrim
+        do {
+            let r: VehicleEstimate = try await auth.withFreshToken(.vehicleEstimate(
+                year: y, make: draft.make, model: draft.model, trim: draft.trim.isEmpty ? nil : draft.trim, miles: m, vin: draft.vin
+            ))
             draft.value = String(Int(r.estimatedValue.rounded()))
             draft.range = (r.lowValue, r.highValue)
             draft.source = r.source
+            estimateNote = nil
+        } catch {
+            // Server can't price this right now: scale the current value by the trim ladder so the number still moves.
+            if let current = Double(draft.value), previousTrim != draft.trim {
+                let ratio = Self.trimFactor(draft.trim) / Self.trimFactor(previousTrim)
+                let v = (current * ratio).rounded()
+                draft.value = String(Int(v))
+                draft.range = (v * 0.9, v * 1.1)
+            }
+            estimateNote = "Couldn't reach the pricing service, so this is a rough adjustment. Edit the value if you know it."
         }
-        estimating = false
+        lastEstimateTrim = draft.trim
     }
 
     private func save() async {

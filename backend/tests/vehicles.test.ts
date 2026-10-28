@@ -1,7 +1,7 @@
 import {
   ageYears, annualMiles, buildDetails, decodeVin, depreciationFactor, displayMake, displayModel, estimateManual, estimateValue,
-  hasValidCheckDigit, heuristicOriginalPrice, inferBodyClass, isValidVinFormat, lookupTrims, marketCheckValue, normalizeVin,
-  parseTrims, trimFactor, valueVehicle,
+  hasValidCheckDigit, heuristicOriginalPrice, inferBodyClass, isValidVinFormat, lookupTrims, marketCheckValue, mileageAdjustment, normalizeVin,
+  parseTrims, trimFactor, valueVehicle, findModel, middleTrim, resolveTrim,
 } from "../src/services/vehicles.js";
 
 const GOOD_VIN = "1HGCM82633A004352";
@@ -26,8 +26,24 @@ describe("depreciation estimate", () => {
     expect(depreciationFactor(0)).toBe(1);
     expect(depreciationFactor(1)).toBeCloseTo(0.8, 5);
     expect(depreciationFactor(2)).toBeCloseTo(0.68, 5);
-    expect(depreciationFactor(5)).toBeCloseTo(0.8 * 0.85 ** 4, 5);
+    expect(depreciationFactor(3)).toBeCloseTo(0.8 * 0.85 ** 2, 5);
+    expect(depreciationFactor(5)).toBeCloseTo(0.8 * 0.85 ** 2 * 0.925 ** 2, 5); // the yearly loss eases after year 3
     expect(depreciationFactor(40)).toBe(0.12);
+  });
+  it("keeps value better for high-retention classes and worse for low", () => {
+    for (const age of [1, 3, 6]) {
+      expect(depreciationFactor(age, "exceptional")).toBeGreaterThan(depreciationFactor(age, "high"));
+      expect(depreciationFactor(age, "high")).toBeGreaterThan(depreciationFactor(age, "standard"));
+      expect(depreciationFactor(age, "standard")).toBeGreaterThan(depreciationFactor(age, "low"));
+    }
+    expect(depreciationFactor(1, "high")).toBeCloseTo(0.9, 5);
+  });
+  it("scales the per-mile rate with price and caps the adjustment at 15%", () => {
+    expect(mileageAdjustment(15_000, 5, 40_000)).toBeCloseTo(20_000 * 0.05, 5);
+    expect(mileageAdjustment(30_000, 5, 40_000)).toBeCloseTo(20_000 * 0.07, 5);
+    expect(mileageAdjustment(50_000, 5, 40_000)).toBeCloseTo(20_000 * 0.09, 5);
+    expect(mileageAdjustment(15_000, 5, 900_000)).toBeCloseTo(-0.15 * 15_000, 5);
+    expect(mileageAdjustment(15_000, 1, 0)).toBeCloseTo(600, 5); // 12,000 under the yardstick x $0.05, within the cap
   });
   it("adjusts for mileage against 12,000 a year and gives a range", () => {
     const now = new Date(Date.UTC(2026, 0, 1));
@@ -39,7 +55,7 @@ describe("depreciation estimate", () => {
     expect(avg.highValue).toBeGreaterThan(avg.estimatedValue);
     expect(avg.source).toBe("estimate");
     const high = estimateValue({ ...args, miles: 12_000 * age + 40_000 });
-    expect(avg.estimatedValue - high.estimatedValue).toBeCloseTo(2000, -1); // 40,000 extra miles x $0.05
+    expect(avg.estimatedValue - high.estimatedValue).toBeCloseTo(2000, -1); // 40,000 extra miles x $0.05 (still under the 15% cap)
     expect(estimateValue({ ...args, miles: 20_000 }).estimatedValue).toBeGreaterThan(avg.estimatedValue);
   });
   it("never returns a zero or negative value", () => {
@@ -74,8 +90,8 @@ describe("decoding and valuation", () => {
     expect(est.source).toBe("estimate");
     // a decoder-supplied base price already belongs to this VIN's trim, so no trim factor is applied
     const age = ageYears(2021, now);
-    const base = 25000 * depreciationFactor(age);
-    expect(est.estimatedValue).toBeCloseTo(base + Math.max(-0.25 * base, Math.min(0.25 * base, (12_000 * age - 60_000) * 0.05)), -1);
+    const base = 25000 * depreciationFactor(age, "high"); // Civic is a high-retention model
+    expect(est.estimatedValue).toBeCloseTo(base + mileageAdjustment(base, age, 60_000), -1);
     expect(est.annualMiles).toBe(Math.round(60000 / age));
   });
 });
@@ -207,5 +223,75 @@ describe("decoding the Bronco payload", () => {
     const v = await valueVehicle(d!, 41_200, {}, new Date(Date.UTC(2026, 9, 28)));
     expect(v.annualMiles).toBeGreaterThan(10_000);
     expect(v.source).toBe("estimate");
+  });
+});
+
+
+describe("trim-level pricing", () => {
+  const now = new Date(Date.UTC(2026, 9, 28));
+  const bronco = (trim: string | null, miles = 41_200) => estimateManual({ year: 2023, make: "Ford", model: "Bronco", trim, miles }, now).estimatedValue;
+
+  it("prices a 2023 Bronco at about 41,000 miles near real market levels", () => {
+    expect(bronco("Wildtrak")).toBeGreaterThanOrEqual(43_000);
+    expect(bronco("Wildtrak")).toBeLessThanOrEqual(48_500);
+    expect(bronco("Big Bend")).toBeGreaterThanOrEqual(35_000);
+    expect(bronco("Big Bend")).toBeLessThanOrEqual(40_000);
+    expect(bronco("Base")).toBeGreaterThanOrEqual(32_000);
+    expect(bronco("Base")).toBeLessThanOrEqual(37_000);
+    expect(bronco("Raptor")).toBeGreaterThan(70_000);
+    expect(bronco("Raptor")).toBeLessThan(90_000);
+  });
+  it("orders trims Base < Big Bend < Badlands < Wildtrak", () => {
+    expect(bronco("Base")).toBeLessThan(bronco("Big Bend"));
+    expect(bronco("Big Bend")).toBeLessThan(bronco("Badlands"));
+    expect(bronco("Badlands")).toBeLessThan(bronco("Wildtrak"));
+  });
+  it("a changed trim changes the value", () => {
+    expect(bronco("Wildtrak")).not.toBe(bronco("Big Bend"));
+    expect(bronco("Wildtrak") - bronco("Big Bend")).toBeGreaterThan(5_000);
+  });
+  it("prices ordinary cars sensibly too", () => {
+    const camry = estimateManual({ year: 2018, make: "Toyota", model: "Camry", trim: "LE", miles: 90_000 }, now).estimatedValue;
+    expect(camry).toBeGreaterThanOrEqual(14_000);
+    expect(camry).toBeLessThanOrEqual(18_500);
+    const civic = estimateManual({ year: 2021, make: "Honda", model: "Civic", trim: "Sport", miles: 40_000 }, now).estimatedValue;
+    expect(civic).toBeGreaterThanOrEqual(19_000);
+    expect(civic).toBeLessThanOrEqual(24_000);
+  });
+  it("uses the middle trim when the trim is missing or unknown", () => {
+    const spec = findModel("Ford", "Bronco")!;
+    const mid = middleTrim(spec);
+    expect(mid.name).toBe("Outer Banks"); // halo trims (Raptor) don't pull the middle up
+    expect(bronco(null)).toBe(bronco(mid.name));
+    expect(bronco("Mystery Package")).toBe(bronco(mid.name));
+    expect(bronco("")).toBe(bronco(mid.name));
+  });
+  it("matches trim text case-insensitively and by words", () => {
+    const spec = findModel("Ford", "Bronco")!;
+    expect(resolveTrim(spec, "wildtrak").name).toBe("Wildtrak");
+    expect(resolveTrim(spec, "BIG BEND").name).toBe("Big Bend");
+    expect(resolveTrim(spec, "Outer Banks 4-door").name).toBe("Outer Banks");
+    expect(resolveTrim(spec, "Black Diamond").name).toBe("Black Diamond");
+    const crv = findModel("Honda", "CR-V")!;
+    expect(resolveTrim(crv, "Sport Touring").name).toBe("Sport Touring");
+  });
+  it("falls back to the tier and body heuristic for unknown models without throwing", () => {
+    const e = estimateManual({ year: 2019, make: "Studebaker", model: "Zephyr", trim: "Deluxe", miles: 50_000 }, now);
+    expect(e.estimatedValue).toBeGreaterThan(500);
+    expect(e.source).toBe("estimate");
+    const known = estimateManual({ year: 2019, make: "Nissan", model: "Altima", trim: "SV", miles: 50_000 }, now);
+    expect(known.estimatedValue).toBeGreaterThan(500);
+  });
+  it("lists trims from the priced table, base to top", () => {
+    expect(lookupTrims("Ford", "Bronco")).toEqual(["Base", "Big Bend", "Black Diamond", "Outer Banks", "Badlands", "Wildtrak", "Everglades", "Heritage", "Raptor"]);
+    expect(lookupTrims("Ford", "F-150 Lightning")).toContain("Platinum");
+    expect(lookupTrims("Ford", "Mustang Mach-E")).toContain("GT");
+    expect(lookupTrims("Toyota", "Tacoma")[0]).toBe("SR");
+  });
+  it("covers the popular models", () => {
+    const covered = [["Ford", "Bronco Sport"], ["Ford", "Maverick"], ["Ford", "Ranger"], ["Jeep", "Wrangler"], ["Jeep", "Gladiator"], ["Toyota", "4Runner"], ["Toyota", "Tundra"],
+      ["Toyota", "RAV4"], ["Honda", "Accord"], ["Honda", "Pilot"], ["Tesla", "Model 3"], ["Tesla", "Model Y"], ["Tesla", "Cybertruck"], ["Subaru", "Outback"],
+      ["Kia", "Telluride"], ["Hyundai", "Palisade"], ["Chevrolet", "Tahoe"], ["Chevrolet", "Suburban"], ["GMC", "Sierra 1500"], ["Ram", "1500"]];
+    for (const [mk, md] of covered) expect(findModel(mk, md), `${mk} ${md}`).not.toBeNull();
   });
 });

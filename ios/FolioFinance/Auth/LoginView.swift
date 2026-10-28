@@ -36,6 +36,7 @@ struct LoginView: View {
                                 TextField("Email", text: $email)
                                     .keyboardType(.emailAddress)
                                     .textContentType(.username)
+                                    .accessibilityIdentifier("email")
                                     .textInputAutocapitalization(.never)
                                     .autocorrectionDisabled()
                                     .submitLabel(.next)

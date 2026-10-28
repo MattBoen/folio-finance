@@ -344,7 +344,7 @@ enum DemoData {
     private static let transactions: [[String: Any]] = {
         let now = Date()
         var rows: [[String: Any]] = []
-        for i in 0..<120 {
+        for i in 0..<380 {
             let date = Calendar.current.date(byAdding: .day, value: -i, to: now) ?? now
             for (k, t) in templates.enumerated() where i % t.every == t.offset {
                 let r = Double((i * 31 + k * 17) % 100) / 100

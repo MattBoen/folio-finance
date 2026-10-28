@@ -64,10 +64,26 @@ export function heuristicOriginalPrice(make: string, bodyClass: string, vehicleT
   return base * body * deflate;
 }
 
-/** ~20% off in year one, ~15%/yr after that, never below 12% of the original price. */
-export function depreciationFactor(ageYears: number): number {
+export type Retention = "exceptional" | "high" | "standard" | "low";
+
+// First-year loss and yearly loss for years 2-3. After year 3 the yearly loss eases to half, because older cars keep
+// settling toward a floor instead of falling at the same rate forever. Never below 12% of the original price.
+const RETENTION: Record<Retention, { y1: number; yr: number }> = {
+  exceptional: { y1: 0.05, yr: 0.05 },
+  high: { y1: 0.10, yr: 0.07 },
+  standard: { y1: 0.20, yr: 0.15 },
+  low: { y1: 0.25, yr: 0.18 },
+};
+
+export function depreciationFactor(ageYears: number, tier: Retention = "standard"): number {
+  const { y1, yr } = RETENTION[tier];
   const age = Math.max(0, ageYears);
-  const f = age < 1 ? 1 - 0.2 * age : 0.8 * Math.pow(0.85, age - 1);
+  let f: number;
+  if (age < 1) f = 1 - y1 * age;
+  else {
+    f = (1 - y1) * Math.pow(1 - yr, Math.min(age, 3) - 1);
+    if (age > 3) f *= Math.pow(1 - yr * 0.5, age - 3);
+  }
   return Math.max(0.12, f);
 }
 
@@ -105,15 +121,20 @@ export function trimFactor(trim: string | null | undefined): number {
 
 export interface Estimate extends Valuation { annualMiles: number; ageYears: number }
 
+/** Dollars per mile off the 12,000-a-year yardstick: pricier cars lose more per mile. Capped at +/-15% so a typo can't wreck the value. */
+export function mileageAdjustment(value: number, age: number, miles: number): number {
+  const rate = value < 20_000 ? 0.05 : value < 40_000 ? 0.07 : value < 70_000 ? 0.09 : 0.10;
+  const adj = (12_000 * age - miles) * rate;
+  return Math.max(-0.15 * value, Math.min(0.15 * value, adj));
+}
+
 export function estimateValue(args: {
-  originalPrice: number; year: number; miles: number; now?: Date; trim?: string | null; applyTrim?: boolean;
+  originalPrice: number; year: number; miles: number; now?: Date; trim?: string | null; applyTrim?: boolean; tier?: Retention;
 }): Valuation {
   const age = ageYears(args.year, args.now);
   const original = args.originalPrice * (args.applyTrim === false ? 1 : trimFactor(args.trim));
-  const base = original * depreciationFactor(age);
-  // $0.05 per mile against the 12,000-a-year yardstick, capped so a typo can't zero out the car
-  const adjust = Math.max(-0.25 * base, Math.min(0.25 * base, (12_000 * age - args.miles) * 0.05));
-  const value = Math.max(500, base + adjust);
+  const base = original * depreciationFactor(age, args.tier ?? "standard");
+  const value = Math.max(500, base + mileageAdjustment(base, age, args.miles));
   const spread = age <= 3 ? 0.10 : 0.12;
   const round = (n: number) => Math.round(n / 10) * 10;
   return { estimatedValue: round(value), lowValue: round(value * (1 - spread)), highValue: round(value * (1 + spread)), source: "estimate" };
@@ -135,23 +156,24 @@ export function inferBodyClass(model: string): string {
   return "";
 }
 
-// Approximate base-trim MSRP (2025 dollars) for popular models; the trim factor scales it up. Much better than the make-tier guess.
+// Fallback for models that aren't in the curated trim table below: an approximate base MSRP, scaled by a trim keyword factor.
 const BASE_MSRP: Record<string, number> = {
-  "ford|bronco": 42000, "ford|broncosport": 33000, "ford|f150": 40000, "ford|mustang": 33000, "ford|explorer": 39000, "ford|escape": 30000,
-  "chevrolet|silverado1500": 38000, "chevrolet|equinox": 28000, "chevrolet|tahoe": 62000, "chevrolet|camaro": 30000, "chevrolet|malibu": 26000, "chevrolet|colorado": 32000,
-  "toyota|camry": 28000, "toyota|corolla": 23000, "toyota|rav4": 30000, "toyota|tacoma": 33000, "toyota|tundra": 42000, "toyota|4runner": 42000, "toyota|highlander": 40000, "toyota|prius": 28000,
-  "honda|civic": 24000, "honda|accord": 28000, "honda|crv": 30000, "honda|pilot": 42000, "honda|ridgeline": 41000,
-  "jeep|wrangler": 33000, "jeep|grandcherokee": 40000, "jeep|gladiator": 38000, "ram|1500": 40000,
-  "tesla|model3": 40000, "tesla|modely": 45000, "tesla|models": 80000, "tesla|modelx": 90000,
-  "subaru|outback": 30000, "subaru|forester": 28000, "subaru|crosstrek": 26000, "nissan|altima": 27000, "nissan|rogue": 29000, "nissan|frontier": 33000,
-  "hyundai|elantra": 22000, "hyundai|tucson": 28000, "hyundai|santafe": 30000, "kia|telluride": 37000, "kia|sorento": 31000, "kia|sportage": 27000,
-  "gmc|sierra1500": 40000, "gmc|yukon": 65000, "bmw|3series": 47000, "mercedesbenz|cclass": 48000, "mazda|cx5": 28000, "volkswagen|jetta": 22000,
+  "chevrolet|camaro": 30000, "chevrolet|malibu": 26000, "chevrolet|colorado": 32000,
+  "toyota|prius": 28000, "honda|ridgeline": 41000,
+  "nissan|altima": 27000, "nissan|frontier": 33000,
+  "hyundai|elantra": 22000, "hyundai|santafe": 30000,
+  "gmc|yukon": 65000, "bmw|3series": 47000, "mercedesbenz|cclass": 48000, "mazda|cx5": 28000, "volkswagen|jetta": 22000,
   "dodge|charger": 33000, "dodge|challenger": 34000, "dodge|durango": 40000,
 };
-// Models that hold their value far better than the generic curve assumes.
-const HIGH_RESALE = new Set(["ford|bronco", "jeep|wrangler", "jeep|gladiator", "toyota|tacoma", "toyota|4runner", "toyota|tundra", "toyota|landcruiser", "honda|ridgeline", "chevrolet|colorado"]);
+const HIGH_RESALE = new Set(["honda|ridgeline", "chevrolet|colorado"]);
 
-function tableKey(make: string, model: string): string | null {
+const REF_YEAR = 2024; // the curated prices below are in roughly 2024 dollars
+/** Older model years cost less new (about 3% a year). */
+function yearScale(year: number): number {
+  return Math.pow(0.97, REF_YEAR - Math.min(year, REF_YEAR + 3));
+}
+
+function fallbackKey(make: string, model: string): string | null {
   const mk = norm(make);
   let md = norm(model);
   md = MODEL_ALIASES[md] ?? md;
@@ -162,24 +184,30 @@ function tableKey(make: string, model: string): string | null {
   }) ?? null;
 }
 
-/** Estimated original price: the curated base MSRP (deflated for older model years) or the make-tier guess. */
-export function originalPriceFor(make: string, model: string, bodyClass: string, vehicleType: string, year: number, nowYear: number): { price: number; curated: boolean; highResale: boolean } {
-  const key = tableKey(make, model);
-  if (key) return { price: BASE_MSRP[key] * Math.pow(0.97, Math.max(0, nowYear - year)), curated: true, highResale: HIGH_RESALE.has(key) };
-  return { price: heuristicOriginalPrice(make, bodyClass || inferBodyClass(model), vehicleType, year, nowYear), curated: false, highResale: false };
-}
-
-function withResale(v: Valuation, highResale: boolean): Valuation {
-  if (!highResale) return v;
-  const f = 1.3;
-  const round = (n: number) => Math.round(n / 10) * 10;
-  return { ...v, estimatedValue: round(v.estimatedValue * f), lowValue: round(v.lowValue * f), highValue: round(v.highValue * f) };
+/** One estimate path for both the VIN lookup and manual entry. */
+function estimateCore(
+  args: { year: number; make: string; model: string; trim?: string | null; miles: number; bodyClass?: string; vehicleType?: string; basePrice?: number | null },
+  now: Date,
+): Valuation {
+  const spec = findModel(args.make, args.model);
+  if (args.basePrice != null) {
+    // a decoder-supplied price already belongs to this VIN's trim, so no trim factor
+    return estimateValue({ originalPrice: args.basePrice, year: args.year, miles: args.miles, now, applyTrim: false, tier: spec?.tier });
+  }
+  if (spec) {
+    const t = resolveTrim(spec, args.trim);
+    return estimateValue({ originalPrice: t.price * yearScale(args.year), year: args.year, miles: args.miles, now, applyTrim: false, tier: t.tier ?? spec.tier });
+  }
+  const key = fallbackKey(args.make, args.model);
+  const price = key
+    ? BASE_MSRP[key] * yearScale(args.year)
+    : heuristicOriginalPrice(args.make, args.bodyClass || inferBodyClass(args.model), args.vehicleType ?? "", args.year, REF_YEAR);
+  return estimateValue({ originalPrice: price, year: args.year, miles: args.miles, now, trim: args.trim, tier: key && HIGH_RESALE.has(key) ? "high" : "standard" });
 }
 
 /** Manual entry (no VIN): make/model/year/trim/miles in, estimate plus age and annual miles out. */
 export function estimateManual(args: { year: number; make: string; model: string; trim?: string | null; miles: number }, now: Date = new Date()): Estimate {
-  const o = originalPriceFor(args.make, args.model, inferBodyClass(args.model), "", args.year, now.getFullYear());
-  const v = withResale(estimateValue({ originalPrice: o.price, year: args.year, miles: args.miles, now, trim: args.trim }), o.highResale);
+  const v = estimateCore(args, now);
   const age = ageYears(args.year, now);
   return { ...v, annualMiles: annualMiles(args.miles, age), ageYears: Math.round(age * 10) / 10 };
 }
@@ -317,10 +345,8 @@ export async function valueVehicle(v: DecodedVin, miles: number, env: { MARKETCH
       return { estimatedValue: round(price), lowValue: round(price * 0.93), highValue: round(price * 1.07), source: "MarketCheck", ...extra };
     }
   }
-  const knownPrice = v.basePrice != null;
-  const o = originalPriceFor(v.make, v.model, v.bodyClass, v.vehicleType, v.year, now.getFullYear());
-  const est = estimateValue({ originalPrice: v.basePrice ?? o.price, year: v.year, miles, now, trim: trimOverride ?? v.trim, applyTrim: !knownPrice });
-  return { ...withResale(est, o.highResale && !knownPrice), ...extra };
+  const est = estimateCore({ year: v.year, make: v.make, model: v.model, trim: trimOverride ?? v.trim, miles, bodyClass: v.bodyClass, vehicleType: v.vehicleType, basePrice: v.basePrice }, now);
+  return { ...est, ...extra };
 }
 
 // ── Curated trims for popular US models (base to top) ─────────────────────────
@@ -385,8 +411,10 @@ const TRIM_TABLE: Record<string, string[]> = {
 
 const MODEL_ALIASES: Record<string, string> = { silverado: "silverado1500", sierra: "sierra1500", ram: "1500", ram1500: "1500", cclass: "cclass", "3": "3series" };
 
-/** Curated trims for a make/model, or [] when the model isn't in the table. */
+/** Curated trims for a make/model (base to top), or [] when the model isn't known. Prefers the priced table. */
 export function lookupTrims(make: string, model: string): string[] {
+  const spec = findModel(make, model);
+  if (spec) return spec.trims.map((t) => t.name);
   const mk = norm(make);
   let md = norm(model);
   md = MODEL_ALIASES[md] ?? md;
@@ -398,4 +426,103 @@ export function lookupTrims(make: string, model: string): string[] {
     return kMake === mk && kModel.length >= 4 && (md.startsWith(kModel) || (md.length >= 4 && kModel.startsWith(md)));
   });
   return hit ? TRIM_TABLE[hit] : [];
+}
+
+// ── Priced trim table ─────────────────────────────────────────────────────────
+// Typical-equipped new price per trim in about 2024 dollars (not base MSRP: real cars carry options), plus a resale class per model.
+// These are curated approximations, not market data. Flags: H = halo trim (left out of the "middle trim" default), X = exceptional resale.
+interface PricedTrim { name: string; price: number; halo?: boolean; tier?: Retention }
+interface ModelSpec { key: string; tier: Retention; trims: PricedTrim[] }
+
+const MODELS: Record<string, ModelSpec> = {};
+function def(key: string, tier: Retention, trims: Array<[string, number] | [string, number, string]>): void {
+  MODELS[key] = {
+    key, tier,
+    trims: trims.map(([name, price, flags]) => ({ name, price, halo: flags?.includes("H") || undefined, tier: flags?.includes("X") ? "exceptional" : undefined })),
+  };
+}
+
+def("ford|bronco", "exceptional", [["Base", 43000], ["Big Bend", 46500], ["Black Diamond", 48000], ["Outer Banks", 50000], ["Badlands", 54500], ["Wildtrak", 57000], ["Everglades", 53500], ["Heritage", 49000], ["Raptor", 100000, "HX"]]);
+def("ford|broncosport", "high", [["Base", 33000], ["Big Bend", 35500], ["Outer Banks", 38500], ["Badlands", 40500], ["Heritage", 36500], ["Heritage Limited", 39500]]);
+def("ford|f150", "high", [["XL", 42000], ["STX", 46000], ["XLT", 52000], ["Lariat", 63000], ["King Ranch", 72000], ["Platinum", 75000], ["Limited", 84000], ["Tremor", 68000], ["Raptor", 90000, "HX"]]);
+def("ford|f150lightning", "low", [["Pro", 55000], ["XLT", 62000], ["Lariat", 78000], ["Platinum", 92000]]);
+def("ford|ranger", "high", [["XL", 33500], ["XLT", 38000], ["Lariat", 45000], ["Raptor", 58000, "H"]]);
+def("ford|maverick", "high", [["XL", 25000], ["XLT", 29000], ["Lariat", 34000], ["Tremor", 36500]]);
+def("ford|mustang", "high", [["EcoBoost", 34000], ["EcoBoost Premium", 40000], ["GT", 46000], ["GT Premium", 51000], ["Mach 1", 62000], ["Dark Horse", 63000], ["Shelby GT500", 90000, "H"]]);
+def("ford|explorer", "standard", [["Base", 40000], ["XLT", 45000], ["Limited", 53000], ["ST-Line", 52000], ["ST", 58000], ["Platinum", 61000], ["King Ranch", 62000], ["Timberline", 56000]]);
+def("ford|escape", "standard", [["S", 31000], ["SE", 33500], ["SEL", 36000], ["Titanium", 39000], ["ST-Line", 37000], ["Platinum", 41000], ["Active", 35000]]);
+def("ford|mustangmache", "low", [["Select", 44000], ["Premium", 51000], ["California Route 1", 54000], ["GT", 62000], ["GT Performance", 66000]]);
+def("jeep|wrangler", "high", [["Sport", 38000], ["Sport S", 41500], ["Willys", 46000], ["Sahara", 52000], ["Rubicon", 57000], ["Rubicon 392", 95000, "H"], ["4xe", 58000]]);
+def("jeep|gladiator", "high", [["Sport", 41000], ["Sport S", 44000], ["Willys", 48000], ["Overland", 53000], ["Rubicon", 57000], ["Mojave", 56000]]);
+def("jeep|grandcherokee", "standard", [["Laredo", 42000], ["Altitude", 46000], ["Limited", 52000], ["Overland", 60000], ["Summit", 68000], ["Trailhawk", 58000], ["Summit Reserve", 72000]]);
+def("chevrolet|silverado1500", "standard", [["WT", 40000], ["Custom", 46000], ["LT", 54000], ["RST", 58000], ["LTZ", 65000], ["High Country", 72000], ["ZR2", 74000], ["Trail Boss", 60000]]);
+def("chevrolet|equinox", "standard", [["L", 28500], ["LS", 30000], ["LT", 32500], ["RS", 34500], ["Premier", 36500], ["ACTIV", 34000]]);
+def("chevrolet|tahoe", "high", [["LS", 62000], ["LT", 69000], ["RST", 74000], ["Z71", 75000], ["Premier", 80000], ["High Country", 85000]]);
+def("chevrolet|suburban", "high", [["LS", 65000], ["LT", 72000], ["RST", 77000], ["Z71", 78000], ["Premier", 83000], ["High Country", 88000]]);
+def("gmc|sierra1500", "standard", [["Pro", 40000], ["SLE", 47000], ["Elevation", 54000], ["SLT", 60000], ["AT4", 66000], ["AT4X", 78000], ["Denali", 73000], ["Denali Ultimate", 85000, "H"]]);
+def("ram|1500", "standard", [["Tradesman", 42000], ["Big Horn", 50000], ["Laramie", 60000], ["Rebel", 62000], ["Limited", 72000], ["TRX", 100000, "H"], ["Longhorn", 68000]]);
+def("toyota|tacoma", "high", [["SR", 34000], ["SR5", 37500], ["TRD Sport", 42000], ["TRD Off-Road", 44000], ["Limited", 51000], ["TRD Pro", 58000]]);
+def("toyota|tundra", "high", [["SR", 46000], ["SR5", 50000], ["Limited", 58000], ["Platinum", 64000], ["1794 Edition", 64500], ["TRD Pro", 74000], ["Capstone", 80000]]);
+def("toyota|4runner", "high", [["SR5", 44000], ["TRD Sport", 47000], ["TRD Off-Road", 49500], ["Limited", 55000], ["Venture", 49000], ["TRD Pro", 58000]]);
+def("toyota|camry", "high", [["LE", 28500], ["SE", 30500], ["XLE", 34500], ["XSE", 35000], ["TRD", 33500]]);
+def("toyota|corolla", "high", [["L", 23500], ["LE", 24500], ["SE", 26500], ["XSE", 28500], ["Apex", 27500]]);
+def("toyota|rav4", "high", [["LE", 31500], ["XLE", 33500], ["XLE Premium", 36000], ["Adventure", 38000], ["TRD Off-Road", 39500], ["Limited", 41500], ["Prime SE", 45000], ["Prime XSE", 48500]]);
+def("toyota|highlander", "high", [["L", 40500], ["LE", 42000], ["XLE", 45500], ["Limited", 50500], ["Platinum", 54000], ["Bronze Edition", 51000]]);
+def("honda|civic", "high", [["LX", 25000], ["Sport", 27500], ["EX", 29000], ["Touring", 31500], ["Si", 30500], ["Type R", 46000, "HX"]]);
+def("honda|accord", "high", [["LX", 29500], ["EX", 31500], ["Sport", 32500], ["EX-L", 34500], ["Touring", 38500], ["Hybrid", 35000]]);
+def("honda|crv", "high", [["LX", 31500], ["EX", 34500], ["EX-L", 37000], ["Sport", 35000], ["Sport Touring", 40000], ["Touring", 41500]]);
+def("honda|pilot", "high", [["LX", 42500], ["EX-L", 46500], ["Sport", 45000], ["TrailSport", 49500], ["Touring", 50500], ["Elite", 53500], ["Black Edition", 54500]]);
+def("tesla|model3", "low", [["Standard Range", 40000], ["Long Range", 46000], ["Performance", 54000]]);
+def("tesla|modely", "low", [["Standard Range", 45000], ["Long Range", 50000], ["Performance", 55000]]);
+def("tesla|models", "low", [["Long Range", 90000], ["Plaid", 110000]]);
+def("tesla|modelx", "low", [["Long Range", 100000], ["Plaid", 120000]]);
+def("tesla|cybertruck", "low", [["All-Wheel Drive", 80000], ["Cyberbeast", 100000]]);
+def("subaru|outback", "high", [["Base", 30000], ["Premium", 33000], ["Limited", 38500], ["Touring", 42000], ["Onyx Edition", 38000], ["Wilderness", 40500]]);
+def("subaru|forester", "high", [["Base", 29500], ["Premium", 32500], ["Sport", 34000], ["Limited", 37000], ["Touring", 39500], ["Wilderness", 36000]]);
+def("subaru|crosstrek", "high", [["Base", 26500], ["Premium", 28500], ["Sport", 30000], ["Limited", 32500], ["Wilderness", 31500]]);
+def("kia|telluride", "high", [["LX", 38000], ["S", 41000], ["EX", 45000], ["SX", 49000], ["SX Prestige", 53000], ["X-Line", 50000], ["X-Pro", 52000]]);
+def("hyundai|palisade", "high", [["SE", 38500], ["SEL", 43000], ["XRT", 45500], ["Limited", 51000], ["Calligraphy", 54000]]);
+def("kia|sorento", "standard", [["LX", 32500], ["S", 36000], ["EX", 40500], ["SX", 44500], ["SX Prestige", 48000], ["X-Line", 44500]]);
+def("hyundai|tucson", "standard", [["SE", 28500], ["SEL", 31500], ["N Line", 35500], ["XRT", 34000], ["Limited", 38000]]);
+def("nissan|rogue", "standard", [["S", 29500], ["SV", 32500], ["SL", 37000], ["Platinum", 40500]]);
+
+const MODEL_KEYS = Object.keys(MODELS).sort((a, b) => b.length - a.length);
+
+/** Curated spec for a make/model; tolerant of case, punctuation and trailing trim words ("Silverado 1500 LT"). */
+export function findModel(make: string, model: string): ModelSpec | null {
+  const mk = norm(make);
+  let md = norm(model);
+  md = MODEL_ALIASES[md] ?? md;
+  const exact = MODELS[`${mk}|${md}`];
+  if (exact) return exact;
+  const hit = MODEL_KEYS.find((k) => {
+    const [kMake, kModel] = k.split("|");
+    return kMake === mk && kModel.length >= 4 && md.startsWith(kModel);
+  });
+  return hit ? MODELS[hit] : null;
+}
+
+function tokens(s: string): string[] {
+  return s.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+}
+
+/** The trim in the middle of the lineup, skipping halo trims; the sensible guess when we don't know the trim. */
+export function middleTrim(spec: ModelSpec): PricedTrim {
+  const core = spec.trims.filter((t) => !t.halo);
+  const list = core.length ? core : spec.trims;
+  return list[Math.floor((list.length - 1) / 2)];
+}
+
+/** Match the user's trim text to a curated trim: exact, then the longest trim name found as a phrase, then all its words. Unknown means middle. */
+export function resolveTrim(spec: ModelSpec, text: string | null | undefined): PricedTrim {
+  const t = (text ?? "").trim().toLowerCase();
+  if (!t) return middleTrim(spec);
+  const exact = spec.trims.find((x) => norm(x.name) === norm(t));
+  if (exact) return exact;
+  const byLength = [...spec.trims].sort((a, b) => b.name.length - a.name.length);
+  const phrase = byLength.find((x) => hasWord(t, x.name.toLowerCase()));
+  if (phrase) return phrase;
+  const words = tokens(t);
+  const allWords = byLength.find((x) => tokens(x.name).every((w) => words.includes(w)));
+  return allWords ?? middleTrim(spec);
 }
