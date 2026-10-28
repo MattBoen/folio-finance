@@ -74,9 +74,14 @@ router.post("/link/token", requireAuth, async (c) => {
   } catch (err) {
     // Plaid rejects the whole request when an optional product isn't enabled on the account.
     // Fall back to transactions only so banks can still be linked.
-    const body = (err as { response?: { data?: { error_message?: string } } })?.response?.data;
-    if (!/not enabled for/i.test(body?.error_message ?? "")) throw err;
-    console.warn("[plaid] optional products not enabled, linking with transactions only:", body?.error_message);
+    const body = (err as {
+      response?: { data?: { error_code?: string; error_message?: string; display_message?: string | null } };
+    })?.response?.data;
+    const text = `${body?.error_message ?? ""} ${body?.display_message ?? ""}`;
+    const productNotEnabled =
+      body?.error_code === "INVALID_PRODUCT" || /not enabled for|not authorized to access/i.test(text);
+    if (!productNotEnabled) throw err;
+    console.warn("[plaid] optional products not enabled, linking with transactions only:", body?.error_code, text.trim());
     const { data } = await plaid.linkTokenCreate(request);
     return c.json({ link_token: data.link_token, expiration: data.expiration });
   }
