@@ -118,7 +118,8 @@ struct AccountsView: View {
                 Text("Its accounts and their history are removed from Folio, and Folio stops receiving data from this bank.")
             }
             .sheet(isPresented: $showCar, onDismiss: { Task { await load() } }) { AddCarSheet { Task { await load() } } }
-            .sheet(item: $editing) { a in EditAccountSheet(account: a) { Task { await load() } } }
+            .sheet(item: $editing) { a in AccountEditSheet(account: a) { Task { await load() } } }
+            .onReceive(NotificationCenter.default.publisher(for: .accountsChanged)) { _ in Task { await load() } }
             .sheet(item: $summaryGroup) { g in groupSheet(g) }
             .confirmationDialog(
                 "Delete \(deleting?.name ?? "account")?",
@@ -409,7 +410,9 @@ struct AccountTransactionsView: View {
     @State private var showEdit = false
     @State private var detail: Transaction?
     @State private var title = ""
+    @State private var live: Account?
     @Environment(\.dismiss) private var dismissDetail
+    private var shown: Account { live ?? account }
 
     private var filtered: [Transaction] {
         guard !searchText.isEmpty else { return transactions }
@@ -430,7 +433,7 @@ struct AccountTransactionsView: View {
                         IconBadge(symbol: account.group.symbol, color: account.group.color, size: 44)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(title.isEmpty ? account.name : title).font(.headline).lineLimit(1)
-                            Text((account.isLiability ? "−" : "") + money(account.currentBalance, cents: true))
+                            Text((shown.isLiability ? "−" : "") + money(shown.currentBalance, cents: true))
                                 .font(.title2.bold()).monospacedDigit().sensitive()
                             Text(account.isLiability ? "Amount owed" : "Current balance")
                                 .font(.caption).foregroundStyle(.secondary)
@@ -472,7 +475,7 @@ struct AccountTransactionsView: View {
             if n.userInfo?["id"] as? String == account.id, let name = n.userInfo?["name"] as? String { title = name }
         }
         .sheet(isPresented: $showEdit) {
-            EditAccountSheet(account: account) { Task { await rename() } }
+            AccountEditSheet(account: account) { Task { await rename() } }
         }
         .sheet(item: $detail) { t in
             TransactionDetailView(transaction: t, all: transactions) { Task { await load() } }
@@ -486,6 +489,7 @@ struct AccountTransactionsView: View {
     private func rename() async {
         if let r: AccountsResponse = try? await auth.withFreshToken(.accounts), let a = r.accounts.first(where: { $0.id == account.id }) {
             title = a.name
+            withAnimation(Motion.spring) { live = a }
         }
     }
 
@@ -711,6 +715,7 @@ struct EditAccountSheet: View {
                 let _: AnyDecodable = try await auth.withFreshToken(.setAccountHidden(id: account.id, hidden: true))
             }
             NotificationCenter.default.post(name: .accountRemoved, object: nil, userInfo: ["id": account.id])
+            NotificationCenter.default.post(name: .accountsChanged, object: nil)
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             onSaved()
             dismiss()
@@ -728,6 +733,7 @@ struct EditAccountSheet: View {
                 let newName = name.trimmingCharacters(in: .whitespaces)
                 let _: AccountResponse = try await auth.withFreshToken(.renameAccount(id: account.id, name: newName))
                 NotificationCenter.default.post(name: .accountRenamed, object: nil, userInfo: ["id": account.id, "name": newName])
+                NotificationCenter.default.post(name: .accountsChanged, object: nil)
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
                 onSaved(); dismiss(); saving = false
                 return
@@ -738,6 +744,7 @@ struct EditAccountSheet: View {
                 institutionName: institution.trimmingCharacters(in: .whitespaces).nilIfEmpty
             ))
             NotificationCenter.default.post(name: .accountRenamed, object: nil, userInfo: ["id": account.id, "name": name.trimmingCharacters(in: .whitespaces)])
+            NotificationCenter.default.post(name: .accountsChanged, object: nil)
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             onSaved()
             dismiss()
@@ -752,6 +759,8 @@ struct EditAccountSheet: View {
 struct AnyDecodable: Decodable, Sendable {}
 
 extension Notification.Name {
+    /// Posted after any change to accounts, so every screen showing them reloads.
+    static let accountsChanged = Notification.Name("accountsChanged")
     static let accountRemoved = Notification.Name("accountRemoved")
     static let accountRenamed = Notification.Name("accountRenamed")
 }

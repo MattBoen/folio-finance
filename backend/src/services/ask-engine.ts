@@ -3,17 +3,21 @@
 import { z } from "zod";
 import { NON_SPENDING, normalizeCategory } from "./categories.js";
 import { SP500_AS_OF, SP500_CAVEAT, sp500ReturnBetween } from "./sp500.js";
-import type { BudgetProposal, BudgetPlanProposal, Proposal } from "./ask-store.js";
-import type { SpendingArgs } from "./ask-data.js";
+import type { BudgetProposal, BudgetPlanProposal, ChangesProposal, Proposal } from "./ask-store.js";
+import { changeOp, type ChangeOp } from "./ask-changes.js";
+import type { SpendingArgs, FindTxArgs } from "./ask-data.js";
 
 export interface Fact { label: string; value: string }
-export interface ProposalOut { id: string; kind: "budget" | "budget_plan"; title: string; detail: string; category: string; currentAmount: number; newAmount: number; items?: { category: string; currentAmount: number; newAmount: number }[] }
+export interface ProposalOut { id: string; kind: "budget" | "budget_plan" | "changes"; title: string; detail: string; category: string; currentAmount: number; newAmount: number; items?: { category: string; currentAmount: number; newAmount: number }[] }
 export interface ChatMessage { role: "user" | "assistant"; content: string }
 
 /** What the tools read and write. The real implementation is services/ask-data + ask-store; tests inject fakes. */
 export interface AskData {
   overview(userId: string): Promise<{ netWorth: number; assets: number; liabilities: number; byGroup: Record<string, number>; accountCount: number }>;
-  accounts(userId: string): Promise<{ accounts: { name: string; group: string; balance: number; institution: string | null }[]; total: number }>;
+  accounts(userId: string): Promise<{ accounts: { id: string; name: string; group: string; balance: number; institution: string | null; connectedToBank: boolean }[]; total: number }>;
+  vehicles(userId: string): Promise<{ vehicles: { id: string; name: string; year: number; make: string; model: string; trim: string | null; miles: number; annualMilesYouDrive: number | null; estimatedMilesNow: number; value: number }[] }>;
+  findTransactions(userId: string, a: FindTxArgs): Promise<{ transactions: { id: string; date: string; name: string; amount: number; category: string; excluded: boolean; account: string | null }[]; note: string }>;
+  describeChanges(userId: string, ops: ChangeOp[]): Promise<string[]>;
   budget(userId: string): Promise<{ month: string; totalLimit: number; totalSpent: number; left: number; categories: { category: string; limit: number; spent: number }[] }>;
   spending(userId: string, a: SpendingArgs): Promise<{ from: string; to: string; total: number; transactionCount: number; topMerchants: { name: string; total: number; count: number }[]; byCategory: { category: string; total: number }[]; filters: { category: string | null; merchant: string | null } }>;
   income(userId: string): Promise<{ monthlyIncome: number; source: string; confidence: string; sources: { name: string; monthly: number; frequency: string }[]; usualMonthlySpending: number }>;
@@ -60,7 +64,7 @@ export const TOOLS = [
   }),
   tool({
     name: "get_accounts",
-    description: "The user's accounts with group, balance and institution.",
+    description: "The user's accounts with id, group, balance, institution and whether a bank feeds it. Use the ids when proposing changes.",
     schema: z.object({}),
     async run(_a, { userId, data }) {
       const r = await data.accounts(userId);
@@ -153,6 +157,48 @@ export const TOOLS = [
     },
   }),
   tool({
+    name: "get_vehicles",
+    description: "The user's cars: id, year/make/model/trim, odometer, miles they drive per year, estimated miles now, and current value.",
+    schema: z.object({}),
+    async run(_a, { userId, data }) {
+      const r = await data.vehicles(userId);
+      return { result: r, facts: r.vehicles.slice(0, 3).map((v) => ({ label: v.name, value: money(v.value) })) };
+    },
+  }),
+  tool({
+    name: "find_transactions",
+    description: "Look up individual transactions (newest first, max 25) so you can get their ids, for example to exclude or recategorize them. Filter by date range, merchant text, category, or amount. Positive amounts are money out.",
+    schema: z.object({ from: isoDate.optional(), to: isoDate.optional(), merchant: z.string().max(60).optional(), category: z.string().max(60).optional(), minAmount: z.number().min(0).optional(), maxAmount: z.number().min(0).optional() }),
+    async run(a, { userId, data }) {
+      const r = await data.findTransactions(userId, a);
+      return { result: r, facts: [{ label: "Transactions found", value: String(r.transactions.length) }] };
+    },
+  }),
+  tool({
+    name: "propose_changes",
+    description: "Propose edits for the user to confirm with one tap. Use it for anything they would otherwise do by hand: rename, hide or delete an account (delete only for accounts not fed by a bank), set a manual account's balance or a physical asset's or car's value, change a car's odometer or yearly miles or re-estimate its value, exclude or include transactions in spending, rename/recategorize/add a note to a transaction, add a manual transaction, add a new manual account, or set monthly income (null goes back to detected). Call get_accounts / get_vehicles / find_transactions first to get the real ids. Budgets use the budget tools instead. This does NOT change anything until the user taps Confirm.",
+    schema: z.object({ changes: z.array(changeOp).min(1).max(20), summary: z.string().max(120).optional() }),
+    async run(a, { userId, data }) {
+      const lines = await data.describeChanges(userId, a.changes);
+      const payload: ChangesProposal = {
+        kind: "changes",
+        title: a.summary?.trim() || (a.changes.length === 1 ? "Make this change" : `Make these ${a.changes.length} changes`),
+        detail: lines.map((l) => `• ${l}`).join("\n"),
+        category: "",
+        currentAmount: 0,
+        newAmount: 0,
+        ops: a.changes,
+      };
+      const id = await data.createProposal(userId, payload);
+      const { ops: _ops, ...shown } = payload;
+      return {
+        result: { status: "awaiting_user_confirmation", changes: lines },
+        facts: [{ label: "Proposed changes", value: String(lines.length) }],
+        proposal: { id, ...shown },
+      };
+    },
+  }),
+  tool({
     name: "propose_budget_change",
     description: "Propose changing the monthly budget for one spending category. This does NOT apply anything: the user must tap Confirm in the app. Use newAmount 0 to remove the category's budget.",
     schema: z.object({ category: z.string().min(1).max(60), newAmount: z.number().min(0).max(10_000_000), reason: z.string().max(200).optional() }),
@@ -229,7 +275,8 @@ export function systemPrompt(today: string): string {
     "- Be concise: 2 to 5 short sentences, plain language, no markdown tables. Mention the specific numbers you used.",
     "- Investing: give general information only, not personalized advice. Never tell the user to buy, sell, or hold a specific security.",
     "- For compare_to_sp500, always tell the user the comparison is rough and repeat the caveat in one short sentence.",
-    "- You cannot change anything yourself. To change one category, call propose_budget_change. To build or redo a whole budget, call propose_budget_plan once with every category. Then tell the user a Confirm button is shown below your answer.",
+    "- All money is in US dollars. Always write amounts with the $ sign (for example $14,500). Never use pounds, euros or any other currency.",
+    "- You cannot change anything yourself, but you can propose changes. To change one budget category, call propose_budget_change. To build or redo a whole budget, call propose_budget_plan once with every category. For everything else the user would do by hand (accounts, balances, cars and their value or miles, physical assets, excluding transactions, renaming or recategorizing transactions, adding transactions or accounts, income), look up the real ids with get_accounts, get_vehicles or find_transactions and then call propose_changes once with all the changes. Never guess an id. Then tell the user a Confirm button is shown below your answer; nothing changes until they tap it.",
     "- If asked something unrelated to the user's finances in this app, politely say you can only help with their Folio data.",
   ].join("\n");
 }
@@ -278,7 +325,7 @@ export async function runAsk(opts: {
 
   for (let round = 1; round <= MAX_ROUNDS; round++) {
     const res = await callModel(client, {
-      model, max_tokens: 800, system: systemPrompt(today), tools: toolSchemas(), messages: convo,
+      model, max_tokens: 900, system: systemPrompt(today), tools: toolSchemas(), messages: convo,
       metadata: { user_id: opts.userHash },
     });
 

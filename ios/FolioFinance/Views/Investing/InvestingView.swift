@@ -134,6 +134,7 @@ struct InvestingView: View {
                 .overlay { if isLoading && !loaded { ProgressView().controlSize(.large) } }
             }
             .navigationTitle("Investing")
+            .onReceive(NotificationCenter.default.publisher(for: .accountsChanged)) { _ in Task { await load() } }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {

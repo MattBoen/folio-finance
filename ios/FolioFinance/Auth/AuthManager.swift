@@ -220,6 +220,9 @@ enum DemoData {
             let decoder = JSONDecoder(); decoder.keyDecodingStrategy = .convertFromSnakeCase
             return try decoder.decode(T.self, from: data)
         }
+        if endpoint.path.hasPrefix("/vehicles/"), endpoint.method == "GET", !endpoint.path.contains("trims") {
+            return try decodeDemo(["year": 2023, "make": "Ford", "model": "Bronco", "trim": "Big Bend", "miles": 41200, "annualMiles": 10800, "currentMiles": 41200, "valueIsManual": false] as [String: Any])
+        }
         if endpoint.path == "/ask" {
             return try decodeDemo(askResponse(for: endpoint))
         }
@@ -365,7 +368,7 @@ enum DemoData {
         acct("demo-savings", "High-Yield Savings", "depository", "savings", 18500, "Harbor Bank"),
         acct("demo-brokerage", "Brokerage", "investment", nil, 42310.20, "Summit Invest"),
         acct("demo-401k", "401(k)", "investment", nil, 61480.75, "Summit Invest"),
-        acct("demo-car", "Vehicle", "other", nil, 14500, "Estimated value"),
+        acct("demo-car", "Vehicle", "other", "vehicle", 14500, "Estimated value"),
         acct("demo-card", "Rewards Card", "credit", nil, 1284.10, "Harbor Bank"),
         acct("demo-loan", "Auto Loan", "loan", "auto", 11200, "Lakeside Credit Union"),
     ]

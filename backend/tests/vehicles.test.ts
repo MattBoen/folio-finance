@@ -295,3 +295,16 @@ describe("trim-level pricing", () => {
     for (const [mk, md] of covered) expect(findModel(mk, md), `${mk} ${md}`).not.toBeNull();
   });
 });
+
+import { projectedMiles } from "../src/services/vehicles.js";
+describe("projectedMiles", () => {
+  it("adds the usual yearly miles for the time since the odometer was recorded", () => {
+    const since = new Date("2025-10-28T00:00:00Z");
+    const now = new Date("2026-10-28T00:00:00Z");
+    expect(projectedMiles(30_000, 12_000, since, now)).toBeGreaterThan(41_900);
+    expect(projectedMiles(30_000, 12_000, since, now)).toBeLessThan(42_100);
+  });
+  it("leaves the odometer alone with no yearly miles", () => {
+    expect(projectedMiles(30_000, null, new Date("2020-01-01"), new Date())).toBe(30_000);
+  });
+});

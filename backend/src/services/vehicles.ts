@@ -97,6 +97,13 @@ export function annualMiles(miles: number, age: number): number {
   return Math.round(miles / Math.max(0.5, age));
 }
 
+/** Odometer now, assuming the customer keeps driving their usual miles a year since it was last recorded. */
+export function projectedMiles(miles: number, annual: number | null | undefined, since: Date, now: Date = new Date()): number {
+  if (!annual || annual <= 0) return miles;
+  const years = Math.max(0, (now.getTime() - since.getTime()) / (365.25 * 86_400_000));
+  return Math.round(miles + annual * years);
+}
+
 // ── Trim factor ───────────────────────────────────────────────────────────────
 // A trim moves price a lot (a Bronco Base vs a Wildtrak). Without a trim database, bucket by well-known names.
 const TRIM_TOP = ["badlands", "wildtrak", "everglades", "platinum", "raptor", "denali", "king ranch", "rubicon", "trd pro", "trailhawk", "summit", "sahara", "type r", "performance", "amg", "m", "plaid", "trx", "hellcat", "zr2", "high country", "capstone", "at4x", "x-pro", "sx prestige", "calligraphy", "heritage limited"];

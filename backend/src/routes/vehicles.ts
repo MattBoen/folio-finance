@@ -9,7 +9,7 @@ import { rateLimit } from "../middleware/rate-limit.js";
 import { takeNetWorthSnapshot } from "../services/plaid-sync.js";
 import { loadAccount } from "./accounts.js";
 import {
-  ageYears, annualMiles, decodeVin, estimateManual, isValidVinFormat, lookupTrims, marketCheckValue, normalizeVin, valueVehicle,
+  ageYears, annualMiles, decodeVin, estimateManual, isValidVinFormat, lookupTrims, marketCheckValue, normalizeVin, projectedMiles, valueVehicle,
 } from "../services/vehicles.js";
 
 const router = new Hono();
@@ -102,6 +102,7 @@ router.post(
       model: z.string().min(1).max(80),
       trim: z.string().max(80).nullish(),
       miles: z.number().int().min(0).max(2_000_000),
+      annual_miles: z.number().int().min(0).max(200_000).optional(),
       value: z.number().min(0).max(100_000_000),
       nickname: z.string().max(80).optional(),
     })
@@ -122,40 +123,82 @@ router.post(
       .returning({ id: accounts.id });
     await db.insert(vehicles).values({
       userId, accountId: acct.id, vin: b.vin ? normalizeVin(b.vin) : "", year: b.year, make: b.make, model: b.model,
-      trim: b.trim?.trim() || null, miles: b.miles,
+      trim: b.trim?.trim() || null, miles: b.miles, annualMiles: b.annual_miles || null,
     });
     await takeNetWorthSnapshot(userId);
     return c.json({ account: await loadAccount(userId, acct.id) }, 201);
   }
 );
 
+// One car's details, for the edit screen.
+router.get("/:accountId", requireAuth, async (c) => {
+  const { userId } = c.get("auth");
+  const accountId = c.req.param("accountId");
+  const [v] = await db
+    .select({
+      year: vehicles.year, make: vehicles.make, model: vehicles.model, trim: vehicles.trim, miles: vehicles.miles,
+      annualMiles: vehicles.annualMiles, valuedAt: vehicles.valuedAt, source: vehicles.valuationSource, vin: vehicles.vin,
+    })
+    .from(vehicles)
+    .innerJoin(accounts, eq(vehicles.accountId, accounts.id))
+    .where(and(eq(vehicles.accountId, accountId), eq(vehicles.userId, userId), isNull(accounts.deletedAt)));
+  if (!v) return c.json({ error: "Not found" }, 404);
+  const now = new Date();
+  return c.json({
+    year: v.year, make: v.make, model: v.model, trim: v.trim, miles: v.miles, annualMiles: v.annualMiles,
+    currentMiles: projectedMiles(v.miles, v.annualMiles, v.valuedAt, now),
+    valuedAt: v.valuedAt, valueIsManual: v.source === "manual", hasVin: v.vin.length > 0,
+  });
+});
+
+// Change any of: odometer, miles per year, trim, or the value itself. `reestimate` recomputes the value from the car's details.
 router.patch(
   "/:accountId",
   requireAuth,
   zValidator(
     "json",
-    z.object({ miles: z.number().int().min(0).max(2_000_000), value: z.number().min(0).max(100_000_000), trim: z.string().max(80).nullish() })
+    z.object({
+      miles: z.number().int().min(0).max(2_000_000).optional(),
+      annual_miles: z.number().int().min(0).max(200_000).nullish(),
+      value: z.number().min(0).max(100_000_000).optional(),
+      trim: z.string().max(80).nullish(),
+      reestimate: z.boolean().optional(),
+    })
   ),
   async (c) => {
     const { userId } = c.get("auth");
     const accountId = c.req.param("accountId");
-    const { miles, value, trim } = c.req.valid("json");
+    const body = c.req.valid("json");
 
     const [v] = await db
-      .select({ id: vehicles.id, year: vehicles.year, make: vehicles.make, model: vehicles.model, nameTrim: vehicles.trim })
+      .select({ id: vehicles.id, year: vehicles.year, make: vehicles.make, model: vehicles.model, nameTrim: vehicles.trim, miles: vehicles.miles, annualMiles: vehicles.annualMiles })
       .from(vehicles)
       .innerJoin(accounts, eq(vehicles.accountId, accounts.id))
       .where(and(eq(vehicles.accountId, accountId), eq(vehicles.userId, userId), isNull(accounts.deletedAt)));
     if (!v) return c.json({ error: "Not found" }, 404);
 
-    const newTrim = trim === undefined ? v.nameTrim : trim?.trim() || null;
-    await db.update(vehicles).set({ miles, trim: newTrim, valuedAt: new Date() }).where(and(eq(vehicles.id, v.id), eq(vehicles.userId, userId)));
+    const now = new Date();
+    const newTrim = body.trim === undefined ? v.nameTrim : body.trim?.trim() || null;
+    const miles = body.miles ?? v.miles;
+    const annual = body.annual_miles === undefined ? v.annualMiles : body.annual_miles || null;
+
+    let value = body.value;
+    let source: "manual" | "estimate" | undefined = value !== undefined ? "manual" : undefined;
+    if (body.reestimate || (value === undefined && (body.miles !== undefined || body.trim !== undefined))) {
+      value = estimateManual({ year: v.year, make: v.make, model: v.model, trim: newTrim, miles }, now).estimatedValue;
+      source = "estimate";
+    }
+
+    await db
+      .update(vehicles)
+      .set({ miles, annualMiles: annual, trim: newTrim, valuedAt: now, ...(source ? { valuationSource: source } : {}) })
+      .where(and(eq(vehicles.id, v.id), eq(vehicles.userId, userId)));
     await db
       .update(accounts)
       .set({
-        balanceCurrent: value.toFixed(2),
-        ...(trim !== undefined ? { name: [v.year, v.make, v.model, newTrim].filter(Boolean).join(" ") } : {}),
-        updatedAt: new Date(),
+        ...(value !== undefined ? { balanceCurrent: value.toFixed(2) } : {}),
+        ...(body.trim !== undefined ? { name: [v.year, v.make, v.model, newTrim].filter(Boolean).join(" ") } : {}),
+        updatedAt: now,
       })
       .where(and(eq(accounts.id, accountId), eq(accounts.userId, userId)));
     await takeNetWorthSnapshot(userId);

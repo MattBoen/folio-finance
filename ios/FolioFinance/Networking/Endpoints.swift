@@ -236,17 +236,20 @@ extension Endpoint {
         return .get("/vehicles/trims?year=\(year)&make=\(enc(make))&model=\(enc(model))")
     }
 
-    static func createVehicle(vin: String?, year: Int, make: String, model: String, trim: String?, miles: Int, value: Double) -> Endpoint {
+    static func createVehicle(vin: String?, year: Int, make: String, model: String, trim: String?, miles: Int, value: Double, annualMiles: Int? = nil) -> Endpoint {
         struct Body: Encodable {
             let vin: String?; let year: Int; let make: String; let model: String
-            let trim: String?; let miles: Int; let value: Double
+            let trim: String?; let miles: Int; let value: Double; let annualMiles: Int?
         }
-        return .post("/vehicles", body: Body(vin: vin, year: year, make: make, model: model, trim: trim, miles: miles, value: value))
+        return .post("/vehicles", body: Body(vin: vin, year: year, make: make, model: model, trim: trim, miles: miles, value: value, annualMiles: annualMiles))
     }
 
-    static func updateVehicle(accountId: String, miles: Int, value: Double) -> Endpoint {
-        struct Body: Encodable { let miles: Int; let value: Double }
-        return .patch("/vehicles/\(accountId)", body: Body(miles: miles, value: value))
+    static func vehicleDetails(accountId: String) -> Endpoint { .get("/vehicles/\(accountId)") }
+
+    /// Change any of the odometer, yearly miles or value. `reestimate` recomputes the value from the car's details.
+    static func updateVehicle(accountId: String, miles: Int? = nil, annualMiles: Int? = nil, value: Double? = nil, reestimate: Bool? = nil) -> Endpoint {
+        struct Body: Encodable { let miles: Int?; let annualMiles: Int?; let value: Double?; let reestimate: Bool? }
+        return .patch("/vehicles/\(accountId)", body: Body(miles: miles, annualMiles: annualMiles, value: value, reestimate: reestimate))
     }
 }
 

@@ -45,6 +45,7 @@
 		AA000000000000000000011F /* SpendingHostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000011E /* SpendingHostView.swift */; };
 		AA0000000000000000000122 /* InvestingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000121 /* InvestingView.swift */; };
 		AC0D1F5A3091270D0066B739 /* LinkKit in Frameworks */ = {isa = PBXBuildFile; productRef = AC0D1F593091270D0066B739 /* LinkKit */; };
+		D3F6146D191C97FA4CC6EE7D /* EditVehicleSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1DB00C7B292CDFAE57AB0B9 /* EditVehicleSheet.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -78,6 +79,7 @@
 		803263EA63F9DF978A85041C /* WidgetSnapshot.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WidgetSnapshot.swift; sourceTree = "<group>"; };
 		87A5069034F52FF62A087482 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		91EBDF72A50B987F6D55A772 /* FolioFinance.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = FolioFinance.entitlements; sourceTree = "<group>"; };
+		A1DB00C7B292CDFAE57AB0B9 /* EditVehicleSheet.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EditVehicleSheet.swift; sourceTree = "<group>"; };
 		AA000000000000000000000E /* FolioFinance.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FolioFinance.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000010 /* FolioFinanceApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolioFinanceApp.swift; sourceTree = "<group>"; };
 		AA0000000000000000000011 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
@@ -338,6 +340,7 @@
 			isa = PBXGroup;
 			children = (
 				AA000000000000000000010A /* CarEntryView.swift */,
+				A1DB00C7B292CDFAE57AB0B9 /* EditVehicleSheet.swift */,
 			);
 			path = Vehicle;
 			sourceTree = "<group>";
@@ -517,6 +520,7 @@
 				32B0BE3F0831ED0599E3D393 /* WidgetSnapshot.swift in Sources */,
 				65BB346EAF6A169CC41F67A6 /* Motion.swift in Sources */,
 				992D2A2A6B5789DA3116E58B /* SettingsView.swift in Sources */,
+				D3F6146D191C97FA4CC6EE7D /* EditVehicleSheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

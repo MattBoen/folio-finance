@@ -116,6 +116,7 @@ struct OverviewView: View {
                 }
             }
             .navigationTitle("Overview")
+            .onReceive(NotificationCenter.default.publisher(for: .accountsChanged)) { _ in Task { await load() } }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {

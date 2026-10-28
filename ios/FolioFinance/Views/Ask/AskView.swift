@@ -231,7 +231,7 @@ struct AskView: View {
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
                 NotificationCenter.default.post(name: .budgetsChanged, object: nil)
                 if let j = messages.firstIndex(where: { $0.id == id }) {
-                    withAnimation(.smooth) { messages[j].proposalState = .confirmed(r.message ?? "Budget updated.") }
+                    withAnimation(.smooth) { messages[j].proposalState = .confirmed(r.message ?? "Done.") }
                 }
             } catch {
                 if let j = messages.firstIndex(where: { $0.id == id }) {
@@ -338,7 +338,7 @@ struct ProposalCard: View {
                     Text(proposal.title).font(.headline)
                 }
                 if let d = proposal.detail { Text(d).font(.subheadline).foregroundStyle(.secondary) }
-                if let cur = proposal.currentAmount, let new = proposal.newAmount {
+                if proposal.kind != "changes", let cur = proposal.currentAmount, let new = proposal.newAmount {
                     HStack(spacing: 8) {
                         Text("\(proposal.category.map { "\($0) budget" } ?? "Budget")").font(.subheadline).foregroundStyle(.secondary)
                         Spacer()

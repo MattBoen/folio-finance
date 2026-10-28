@@ -208,6 +208,8 @@ export const vehicles = pgTable(
     model: text("model").notNull(),
     trim: text("trim"),
     miles: integer("miles").notNull(),
+    // Miles driven per year, so the value can keep up with the odometer between updates.
+    annualMiles: integer("annual_miles"),
     valuationSource: text("valuation_source").notNull().default("estimate"),
     valuedAt: timestamp("valued_at", { withTimezone: true }).notNull().defaultNow(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

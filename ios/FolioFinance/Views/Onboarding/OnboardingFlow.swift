@@ -39,7 +39,7 @@ struct OnboardingFlow: View {
             PlaidLinkSheet(onLinked: { _ in Task { await loadAccounts() } })
         }
         .sheet(isPresented: $showManual) { AddAccountSheet { Task { await loadAccounts() } } }
-        .sheet(item: $editing) { a in EditAccountSheet(account: a) { Task { await loadAccounts() } } }
+        .sheet(item: $editing) { a in AccountEditSheet(account: a) { Task { await loadAccounts() } } }
         .confirmationDialog("Remove \(removing?.name ?? "account")?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }), titleVisibility: .visible) {
             Button("Remove", role: .destructive) { if let a = removing { Task { await remove(a) } } }
         } message: { Text("It's removed from your net worth. You can add it again any time.") }

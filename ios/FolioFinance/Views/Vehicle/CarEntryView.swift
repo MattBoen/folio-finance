@@ -13,6 +13,7 @@ struct CarEntryView: View {
         var model = ""
         var trim = ""
         var miles = ""
+        var annual = ""
         var value = ""
         var details: String?
         var range: (low: Double, high: Double)?
@@ -130,6 +131,11 @@ struct CarEntryView: View {
                             .background((annual > 15_000 ? Color.orange : annual < 9_000 ? Color.teal : Color.green).opacity(0.15), in: Capsule())
                         Spacer()
                     }
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    field("Miles you drive per year (optional)", $draft.annual, keyboard: .numberPad)
+                    Text("Folio uses this to keep your car's value up to date as the odometer climbs.")
+                        .font(.footnote).foregroundStyle(.secondary)
                 }
 
                 Divider()
@@ -296,7 +302,8 @@ struct CarEntryView: View {
         do {
             let _: AccountResponse = try await auth.withFreshToken(.createVehicle(
                 vin: draft.vin, year: y, make: draft.make.trimmingCharacters(in: .whitespaces), model: draft.model.trimmingCharacters(in: .whitespaces),
-                trim: draft.trim.isEmpty ? nil : draft.trim, miles: m, value: v
+                trim: draft.trim.isEmpty ? nil : draft.trim, miles: m, value: v,
+                annualMiles: Int(draft.annual.filter(\.isNumber)) ?? annualMiles
             ))
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             let name = [draft.year, draft.make, draft.model, draft.trim].filter { !$0.isEmpty }.joined(separator: " ")

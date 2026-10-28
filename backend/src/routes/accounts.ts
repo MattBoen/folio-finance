@@ -6,6 +6,7 @@ import { db } from "../db/client.js";
 import { accounts, plaidItems, netWorthSnapshots } from "../db/schema.js";
 import { requireAuth } from "../middleware/auth.js";
 import { takeNetWorthSnapshot } from "../services/plaid-sync.js";
+import { refreshVehicleValues } from "../services/vehicle-values.js";
 
 const router = new Hono();
 
@@ -38,6 +39,8 @@ export async function loadAccount(userId: string, id: string) {
 // ── List accounts ─────────────────────────────────────────────────────────────
 router.get("/", requireAuth, async (c) => {
   const { userId } = c.get("auth");
+  // Cars with a known yearly mileage keep their value current as time passes.
+  if (await refreshVehicleValues(userId).catch(() => false)) await takeNetWorthSnapshot(userId);
 
   const rows = await db
     .select(accountSelect)

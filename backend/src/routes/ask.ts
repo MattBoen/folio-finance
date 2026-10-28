@@ -22,6 +22,9 @@ const realData: AskData = {
   netWorthWindow: data.getNetWorthWindow,
   currentBudgetAmount: data.getCurrentBudgetAmount,
   createProposal: store.createProposal,
+  vehicles: data.getVehicles,
+  findTransactions: data.findTransactions,
+  describeChanges: data.describeChanges,
 };
 
 /** An opaque, stable id for Anthropic's abuse detection. Not reversible without the server's key. */

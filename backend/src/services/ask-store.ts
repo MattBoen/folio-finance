@@ -5,6 +5,8 @@ import { db } from "../db/client.js";
 import { askProposals, askUsage, budgets, userSettings } from "../db/schema.js";
 import { findOrCreateCategory } from "./category-db.js";
 import { normalizeCategory } from "./categories.js";
+import { applyChanges, changeOp, type ChangeOp } from "./ask-changes.js";
+import { z } from "zod";
 
 export const PROPOSAL_TTL_MS = 15 * 60_000;
 
@@ -80,7 +82,18 @@ export interface BudgetPlanProposal {
   items: BudgetPlanItem[];
 }
 
-export type Proposal = BudgetProposal | BudgetPlanProposal;
+/** Any mix of edits to accounts, cars, transactions and income, confirmed with one tap. */
+export interface ChangesProposal {
+  kind: "changes";
+  title: string;
+  detail: string;
+  category: string;
+  currentAmount: number;
+  newAmount: number;
+  ops: ChangeOp[];
+}
+
+export type Proposal = BudgetProposal | BudgetPlanProposal | ChangesProposal;
 
 export async function createProposal(userId: string, payload: Proposal): Promise<string> {
   const [row] = await db
@@ -106,6 +119,7 @@ export async function confirmProposal(userId: string, proposalId: string): Promi
 
   const stored = p.payload as Proposal;
   if (stored.kind === "budget_plan") return applyPlan(userId, proposalId, stored);
+  if (stored.kind === "changes") return applyChangesProposal(userId, proposalId, stored);
   if (stored.kind !== "budget") return { ok: false, status: 404, error: "Not found" };
   const payload = stored;
   const category = normalizeCategory(payload.category);
@@ -138,6 +152,25 @@ export async function confirmProposal(userId: string, proposalId: string): Promi
 
   const verb = payload.newAmount <= 0 ? "removed" : "set to $" + Math.round(payload.newAmount).toLocaleString("en-US");
   return { ok: true, message: `${category} budget ${verb}.` };
+}
+
+async function applyChangesProposal(userId: string, proposalId: string, p: ChangesProposal): Promise<ConfirmResult> {
+  const ops = z.array(changeOp).safeParse(p.ops);
+  if (!ops.success) return { ok: false, status: 404, error: "Not found" };
+  // Claim it first so a double tap can't apply it twice; give it back if the changes can't be made.
+  const claimed = await db
+    .update(askProposals)
+    .set({ appliedAt: new Date() })
+    .where(and(eq(askProposals.id, proposalId), eq(askProposals.userId, userId), sql`${askProposals.appliedAt} is null`))
+    .returning({ id: askProposals.id });
+  if (claimed.length === 0) return { ok: false, status: 409, error: "That change was already handled." };
+  try {
+    const n = await applyChanges(userId, ops.data);
+    return { ok: true, message: n === 1 ? "Done. That change is made." : `Done. ${n} changes made.` };
+  } catch (e) {
+    await db.update(askProposals).set({ appliedAt: null }).where(eq(askProposals.id, proposalId));
+    return { ok: false, status: 409, error: (e as Error).message || "Those changes couldn't be made." };
+  }
 }
 
 async function applyPlan(userId: string, proposalId: string, plan: BudgetPlanProposal): Promise<ConfirmResult> {

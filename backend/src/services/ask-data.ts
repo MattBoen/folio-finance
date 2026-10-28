@@ -2,7 +2,9 @@
 import { and, asc, desc, eq, gte, isNull, lte } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "../db/client.js";
-import { accounts, categories, netWorthSnapshots, plaidItems, transactions } from "../db/schema.js";
+import { accounts, categories, netWorthSnapshots, plaidItems, transactions, vehicles } from "../db/schema.js";
+import { describeChange, type ChangeOp } from "./ask-changes.js";
+import { projectedMiles } from "./vehicles.js";
 import { NON_SPENDING, normalizeCategory } from "./categories.js";
 import { computeInsightsForUser, todayIso } from "./insight-data.js";
 import { merchantKey } from "./insights.js";
@@ -20,18 +22,21 @@ export function groupOf(type: string, subtype: string | null): GroupName {
   return /sav|^cd$|money market/i.test(subtype ?? "") ? "Savings" : "Cash";
 }
 
-export interface AcctRow { name: string; group: GroupName; balance: number; institution: string | null; limit: number | null }
+export interface AcctRow { id: string; connected: boolean; subtype: string | null; name: string; group: GroupName; balance: number; institution: string | null; limit: number | null }
 
 async function loadAccounts(userId: string): Promise<AcctRow[]> {
   const rows = await db
     .select({
-      name: accounts.name, type: accounts.type, subtype: accounts.subtype, balance: accounts.balanceCurrent,
+      id: accounts.id, plaidItemId: accounts.plaidItemId, name: accounts.name, type: accounts.type, subtype: accounts.subtype, balance: accounts.balanceCurrent,
       limit: accounts.balanceLimit, official: accounts.officialName, inst: plaidItems.institutionName,
     })
     .from(accounts)
     .leftJoin(plaidItems, eq(accounts.plaidItemId, plaidItems.id))
     .where(and(eq(accounts.userId, userId), isNull(accounts.deletedAt), eq(accounts.isHidden, false)));
   return rows.map((r) => ({
+    id: r.id,
+    connected: r.plaidItemId != null,
+    subtype: r.subtype,
     name: r.name,
     group: groupOf(r.type, r.subtype),
     balance: r2(parseFloat(r.balance ?? "0")),
@@ -53,7 +58,58 @@ export async function getOverview(userId: string) {
 
 export async function getAccountsList(userId: string) {
   const list = await loadAccounts(userId);
-  return { accounts: list.slice(0, 40).map((a) => ({ name: a.name, group: a.group, balance: a.balance, institution: a.institution })), total: list.length };
+  return { accounts: list.slice(0, 40).map((a) => ({ id: a.id, name: a.name, group: a.group, balance: a.balance, institution: a.institution, connectedToBank: a.connected })), total: list.length };
+}
+
+export async function getVehicles(userId: string) {
+  const rows = await db
+    .select({ accountId: vehicles.accountId, name: accounts.name, year: vehicles.year, make: vehicles.make, model: vehicles.model, trim: vehicles.trim, miles: vehicles.miles, annualMiles: vehicles.annualMiles, valuedAt: vehicles.valuedAt, value: accounts.balanceCurrent })
+    .from(vehicles)
+    .innerJoin(accounts, eq(vehicles.accountId, accounts.id))
+    .where(and(eq(vehicles.userId, userId), isNull(accounts.deletedAt)));
+  return {
+    vehicles: rows.map((v) => ({
+      id: v.accountId, name: v.name, year: v.year, make: v.make, model: v.model, trim: v.trim,
+      miles: v.miles, annualMilesYouDrive: v.annualMiles, estimatedMilesNow: projectedMiles(v.miles, v.annualMiles, v.valuedAt),
+      value: r2(parseFloat(v.value ?? "0")),
+    })),
+  };
+}
+
+export interface FindTxArgs { from?: string; to?: string; merchant?: string; category?: string; minAmount?: number; maxAmount?: number; includeExcluded?: boolean }
+
+export async function findTransactions(userId: string, a: FindTxArgs) {
+  const userCat = alias(categories, "user_cat");
+  const plaidCat = alias(categories, "plaid_cat");
+  const rows = await db
+    .select({
+      id: transactions.id, date: transactions.date, amount: transactions.amount, name: transactions.name, userName: transactions.userName,
+      merchant: transactions.merchantName, userCat: userCat.name, plaidCat: plaidCat.name, excluded: transactions.isExcluded, account: accounts.name,
+    })
+    .from(transactions)
+    .leftJoin(accounts, eq(transactions.accountId, accounts.id))
+    .leftJoin(userCat, eq(transactions.userCategoryId, userCat.id))
+    .leftJoin(plaidCat, eq(transactions.categoryId, plaidCat.id))
+    .where(and(eq(transactions.userId, userId), isNull(transactions.deletedAt), a.from ? gte(transactions.date, a.from) : undefined, a.to ? lte(transactions.date, a.to) : undefined))
+    .orderBy(desc(transactions.date))
+    .limit(600);
+  const m = a.merchant?.toLowerCase();
+  const c = a.category ? normalizeCategory(a.category) : null;
+  const out = rows
+    .map((r) => ({
+      id: r.id, date: r.date, name: r.userName || r.merchant || r.name, amount: r2(parseFloat(r.amount)),
+      category: normalizeCategory(r.userCat ?? r.plaidCat ?? (parseFloat(r.amount) > 0 ? "Other" : "Income")), excluded: r.excluded, account: r.account,
+    }))
+    .filter((r) => (a.includeExcluded ? true : true) && (!m || r.name.toLowerCase().includes(m)) && (!c || r.category === c)
+      && (a.minAmount == null || Math.abs(r.amount) >= a.minAmount) && (a.maxAmount == null || Math.abs(r.amount) <= a.maxAmount))
+    .slice(0, 25);
+  return { transactions: out, note: "Positive amounts are money out, negative are money in." };
+}
+
+export async function describeChanges(userId: string, ops: ChangeOp[]): Promise<string[]> {
+  const lines: string[] = [];
+  for (const op of ops) lines.push(await describeChange(userId, op));
+  return lines;
 }
 
 export async function getBudget(userId: string) {

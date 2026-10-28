@@ -19,6 +19,9 @@ function fakeData(over: Partial<AskData> = {}): AskData {
     netWorthWindow: async () => ({ startDate: "2023-01-03", endDate: "2023-12-29", start: 100000, end: 118000, snapshots: 200 }),
     currentBudgetAmount: async () => 800,
     createProposal: async () => "11111111-1111-4111-8111-111111111111",
+    vehicles: async () => ({ vehicles: [] }),
+    findTransactions: async () => ({ transactions: [], note: "" }),
+    describeChanges: async (_u, ops) => ops.map((o) => o.op),
     ...over,
   };
 }
@@ -35,6 +38,37 @@ const toolUse = (id: string, name: string, input: unknown) => ({ stop_reason: "t
 const text = (t: string) => ({ stop_reason: "end_turn", content: [{ type: "text", text: t }] });
 const run = (client: AskClient, data = fakeData(), messages = [{ role: "user" as const, content: "How much at Whole Foods this month?" }]) =>
   runAsk({ client, model: "m", userId: "u1", userHash: "hash123", today: TODAY, messages, data });
+
+describe("ask engine: changes", () => {
+  const ACCT = "33333333-3333-4333-8333-333333333333";
+  it("proposes a batch of edits without applying anything, and tells the model to use dollars", async () => {
+    let saved: any;
+    const { client, calls } = scripted([
+      toolUse("t1", "propose_changes", { changes: [{ op: "update_vehicle", accountId: ACCT, value: 38000, annualMiles: 9000 }, { op: "update_account", accountId: ACCT, name: "Bronco Fund" }], summary: "Update your Bronco" }),
+      text("I can set the Bronco to $38,000. Tap Confirm below."),
+    ]);
+    const out = await run(client, fakeData({ createProposal: async (_u, p) => { saved = p; return "44444444-4444-4444-8444-444444444444"; } }));
+    expect(saved.kind).toBe("changes");
+    expect(saved.ops).toHaveLength(2);
+    expect(out.proposal).toMatchObject({ kind: "changes", title: "Update your Bronco" });
+    expect((out.proposal as any).ops).toBeUndefined();
+    expect(calls[0].system).toMatch(/US dollars/);
+  });
+
+  it("rejects a change with a made-up id instead of proposing it", async () => {
+    const { client, calls } = scripted([toolUse("t1", "propose_changes", { changes: [{ op: "delete_account", accountId: "not-an-id" }] }), text("Which account?")]);
+    const out = await run(client);
+    expect(out.proposal).toBeNull();
+    expect(calls[1].messages.at(-1).content[0].is_error).toBe(true);
+  });
+
+  it("surfaces a refusal from the checks (for example a bank-fed balance)", async () => {
+    const { client, calls } = scripted([toolUse("t1", "propose_changes", { changes: [{ op: "update_account", accountId: ACCT, balance: 5 }] }), text("That one updates by itself.")]);
+    const out = await run(client, fakeData({ describeChanges: async () => { throw new Error("Checking is connected to a bank, so its balance updates by itself."); } }));
+    expect(out.proposal).toBeNull();
+    expect(calls[1].messages.at(-1).content[0].content).toMatch(/connected to a bank/);
+  });
+});
 
 describe("ask engine", () => {
   it("runs the tool loop and returns the answer with the exact numbers used", async () => {
@@ -117,7 +151,7 @@ describe("ask engine", () => {
 
   it("publishes JSON-schema tools the API accepts", () => {
     const schemas = toolSchemas();
-    expect(schemas.map((s) => s.name)).toEqual(["get_overview", "get_accounts", "get_budget", "get_spending", "get_income", "get_health_metrics", "get_investments", "compare_to_sp500", "propose_budget_change", "propose_budget_plan"]);
+    expect(schemas.map((s) => s.name)).toEqual(["get_overview", "get_accounts", "get_budget", "get_spending", "get_income", "get_health_metrics", "get_investments", "compare_to_sp500", "get_vehicles", "find_transactions", "propose_changes", "propose_budget_change", "propose_budget_plan"]);
     for (const s of schemas) { expect(s.input_schema.type).toBe("object"); expect(s.description.length).toBeGreaterThan(10); }
     expect(schemas.find((s) => s.name === "propose_budget_change")!.input_schema).toMatchObject({ required: ["category", "newAmount"] });
   });
@@ -201,6 +235,7 @@ vi.mock("../src/services/ask-data.js", () => ({
   getAccountsList: async () => ({ accounts: [], total: 0 }), getBudget: async () => ({ month: "2026-10", totalLimit: 0, totalSpent: 0, left: 0, categories: [] }),
   getSpending: async (_u: string, a: any) => ({ from: a.from, to: a.to, total: 142.3, transactionCount: 3, topMerchants: [], byCategory: [], filters: { category: null, merchant: null } }),
   getIncome: async () => ({}), getHealth: async () => ({}), getInvestments: async () => ({}), getNetWorthWindow: async () => null, getCurrentBudgetAmount: async () => 0,
+  getVehicles: async () => ({ vehicles: [] }), findTransactions: async () => ({ transactions: [], note: "" }), describeChanges: async () => [],
 }));
 vi.mock("../src/db/client.js", () => ({ db: {} }));
 
