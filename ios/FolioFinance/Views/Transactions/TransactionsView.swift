@@ -51,7 +51,7 @@ struct TransactionsView: View {
                 }
             }
             .titledUnlessEmbedded("Activity", embedded: embedded)
-            .modifier(OptionalSearch(enabled: active, text: $searchText))
+            .modifier(OptionalSearch(enabled: !embedded, text: $searchText))
             .refreshable { await load() }
             .toolbar {
                 if active {
@@ -66,9 +66,24 @@ struct TransactionsView: View {
             }
     }
 
+    /// Inline search, used when a host's pinned switch sits under the nav bar where the system field would go.
+    private var searchField: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+            TextField("Search transactions", text: $searchText)
+                .submitLabel(.search).autocorrectionDisabled()
+            if !searchText.isEmpty {
+                Button { searchText = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
+            }
+        }
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
     private var listView: some View {
         ScrollView {
             LazyVStack(spacing: 14) {
+                if embedded { searchField }
                 if let error { ErrorBanner(message: error) { Task { await load() } } }
                 if !searchText.isEmpty && filtered.isEmpty {
                     EmptyStateCard(symbol: "magnifyingglass", title: "No matches", message: "Try a different merchant, category or account.")
