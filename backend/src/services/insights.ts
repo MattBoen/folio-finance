@@ -304,7 +304,7 @@ export function buildInsights(input: InsightsInput) {
     { label: "Cash", amount: cash },
     { label: "Savings", amount: savings },
     { label: "Investments", amount: invested },
-    { label: "Other assets", amount: other },
+    { label: "Physical assets", amount: other },
   ].filter((s) => s.amount > 0);
   const allocation = slices.map((s) => ({ label: s.label, amount: r2(s.amount), percent: totalAssets > 0 ? Math.round((s.amount / totalAssets) * 1000) / 10 : 0 }));
 

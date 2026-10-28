@@ -2,6 +2,7 @@ import SwiftUI
 import Charts
 
 struct SpendingView: View {
+    var embedded = false
     @EnvironmentObject private var auth: AuthManager
     @State private var month = SpendingView.startOfMonth(Date())
     @State private var transactions: [Transaction] = []
@@ -53,7 +54,13 @@ struct SpendingView: View {
     // MARK: Body
 
     var body: some View {
-        NavigationStack {
+        Group {
+            if embedded { core } else { NavigationStack { core } }
+        }
+        .task(id: month) { await load() }
+    }
+
+    private var core: some View {
             ZStack {
                 Wash(tone: .spending)
                 ScrollView {
@@ -83,12 +90,12 @@ struct SpendingView: View {
                 .refreshable { await load() }
                 .overlay { if isLoading && !loaded { ProgressView().controlSize(.large) } }
             }
-            .navigationTitle("Spending")
+            .titledUnlessEmbedded("Spending", embedded: embedded)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showAdd = true } label: { Image(systemName: "plus") }
                 }
-                ToolbarItem(placement: .topBarTrailing) { ProfileMenu() }
+                if !embedded { ToolbarItem(placement: .topBarTrailing) { ProfileMenu() } }
             }
             .sheet(isPresented: $showAdd) { AddTransactionSheet { Task { await load() } } }
             .sheet(item: $detail) { t in
@@ -96,8 +103,6 @@ struct SpendingView: View {
             }
             .sheet(item: $sheet) { kind in summarySheet(kind) }
             .sensoryFeedback(.selection, trigger: month)
-        }
-        .task(id: month) { await load() }
     }
 
     // MARK: Pieces

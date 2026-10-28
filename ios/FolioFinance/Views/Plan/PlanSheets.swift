@@ -7,7 +7,6 @@ enum PlanSheetKind: Identifiable {
     case budget
     case category(BudgetLine)
     case health(HealthMetric)
-    case investing
 
     var id: String {
         switch self {
@@ -16,7 +15,6 @@ enum PlanSheetKind: Identifiable {
         case .budget: "budget"
         case .category(let l): "category-\(l.id)"
         case .health(let m): "health-\(m.rawValue)"
-        case .investing: "investing"
         }
     }
 }

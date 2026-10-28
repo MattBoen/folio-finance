@@ -269,7 +269,7 @@ enum DemoData {
         "health": ["savingsRate": 0.40, "emergencyFundMonths": 6.2, "creditUtilization": 0.12, "debtPaymentRatio": 0.09],
         "investing": ["totalInvested": 103791,
                       "allocation": [["label": "Cash", "amount": 4820, "percent": 3.4], ["label": "Savings", "amount": 18500, "percent": 13.1],
-                                     ["label": "Investments", "amount": 103791, "percent": 73.3], ["label": "Other assets", "amount": 14500, "percent": 10.2]],
+                                     ["label": "Investments", "amount": 103791, "percent": 73.3], ["label": "Physical assets", "amount": 14500, "percent": 10.2]],
                       "notes": [["id": "match", "title": "Retirement saving looks strong", "detail": "You're putting away well over the 15% of income many people aim for.", "tone": "good"],
                                 ["id": "cash", "title": "A lot sits in savings", "detail": "Above six months of spending in cash can lag behind inflation. Some people move the extra into longer-term investments.", "tone": "info"]]],
         "dataQuality": ["monthsOfData": 4, "transactionCount": 214],

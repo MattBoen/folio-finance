@@ -3,27 +3,84 @@ import Charts
 
 private func dbl(_ d: Decimal) -> Double { NSDecimalNumber(decimal: d).doubleValue }
 
-/// Group rows (icon, share bar, total) followed by one list of accounts per group.
-private func groupSections(_ groups: [AccountGroup], accounts: [Account], total: Double) -> [BreakdownSection] {
-    let present = groups.filter { g in accounts.contains { $0.group == g } }
-    let summary = BreakdownSection(title: "By type", rows: present.map { g in
-        let list = accounts.filter { $0.group == g }
-        let sum = list.reduce(0) { $0 + dbl($1.currentBalance) }
-        return BreakdownRow(symbol: g.symbol, color: g.color, title: g.rawValue,
-                            subtitle: "\(list.count) account\(list.count == 1 ? "" : "s") · \(Int((sum / max(total, 1) * 100).rounded()))%",
-                            value: money(sum), fraction: sum / max(total, 1))
-    })
-    let detail = present.map { g -> BreakdownSection in
-        let list = accounts.filter { $0.group == g }.sorted { $0.currentBalance > $1.currentBalance }
-        return BreakdownSection(title: g.rawValue, rows: list.map { a in
-            var sub = a.institutionName ?? a.typeLabel
-            if g == .credit, let limitText = a.balanceLimit, let limit = Decimal(string: limitText), limit > 0 {
-                sub += " · \(Int((dbl(a.currentBalance) / dbl(limit) * 100).rounded()))% of \(money(limit)) limit"
+/// "By type": each group is one row (icon, share, total) that drops down to its accounts.
+private struct TypeDropdownCard: View {
+    let groups: [AccountGroup]
+    let accounts: [Account]
+    let total: Double
+    @State private var open: Set<AccountGroup> = []
+
+    var body: some View {
+        let present = groups.filter { g in accounts.contains { $0.group == g } }
+        VStack(spacing: 8) {
+            SectionTitle("By type")
+            Card(padding: 0) {
+                VStack(spacing: 0) {
+                    ForEach(present) { g in
+                        let list = accounts.filter { $0.group == g }.sorted { $0.currentBalance > $1.currentBalance }
+                        let sum = list.reduce(0) { $0 + dbl($1.currentBalance) }
+                        let isOpen = open.contains(g)
+                        VStack(spacing: 0) {
+                            Button {
+                                withAnimation(.smooth(duration: 0.4)) {
+                                    if isOpen { open.remove(g) } else { open.insert(g) }
+                                }
+                            } label: {
+                                VStack(alignment: .leading, spacing: 7) {
+                                    HStack(spacing: 12) {
+                                        IconBadge(symbol: g.symbol, color: g.color, size: 34)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(g.rawValue).font(.body)
+                                            Text("\(list.count) account\(list.count == 1 ? "" : "s") · \(Int((sum / max(total, 1) * 100).rounded()))%")
+                                                .font(.caption).foregroundStyle(.secondary)
+                                        }
+                                        Spacer(minLength: 8)
+                                        Text((g.isLiability ? "−" : "") + money(sum)).font(.body.weight(.semibold)).monospacedDigit().sensitive()
+                                        Image(systemName: "chevron.right").font(.caption.weight(.bold)).foregroundStyle(.tertiary)
+                                            .rotationEffect(.degrees(isOpen ? 90 : 0))
+                                    }
+                                    ProgressBar(fraction: sum / max(total, 1), color: g.color)
+                                }
+                                .padding(.horizontal, 16).padding(.vertical, 12)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+
+                            if isOpen {
+                                VStack(spacing: 0) {
+                                    ForEach(list) { a in
+                                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(a.name).font(.subheadline).lineLimit(1)
+                                                Text(detail(a, group: g)).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                                            }
+                                            Spacer(minLength: 8)
+                                            Text((a.isLiability ? "−" : "") + money(a.currentBalance, cents: true))
+                                                .font(.subheadline).monospacedDigit().sensitive()
+                                        }
+                                        .padding(.leading, 62).padding(.trailing, 16).padding(.vertical, 8)
+                                    }
+                                }
+                                .padding(.bottom, 6)
+                                .transition(.opacity.combined(with: .move(edge: .top)))
+                            }
+                            if g != present.last { Divider().padding(.leading, 62) }
+                        }
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
             }
-            return BreakdownRow(title: a.name, subtitle: sub, value: (a.isLiability ? "−" : "") + money(a.currentBalance, cents: true))
-        })
+        }
+        .sensoryFeedback(.selection, trigger: open)
     }
-    return [summary] + detail
+
+    private func detail(_ a: Account, group g: AccountGroup) -> String {
+        var sub = a.institutionName ?? a.typeLabel
+        if g == .credit, let limitText = a.balanceLimit, let limit = Decimal(string: limitText), limit > 0 {
+            sub += " · \(Int((dbl(a.currentBalance) / dbl(limit) * 100).rounded()))% of \(money(limit)) limit"
+        }
+        return sub
+    }
 }
 
 struct AssetsSummarySheet: View {
@@ -40,8 +97,9 @@ struct AssetsSummarySheet: View {
             caption = "Biggest holding: \(biggest.0.rawValue) (\(Int((biggest.1 / max(total, 1) * 100).rounded()))% of assets)"
             if netWorth > 0 { caption! += ". Assets equal \(Int((total / netWorth * 100).rounded()))% of your net worth." }
         }
-        return BreakdownSheet(title: "Assets", headline: money(total), caption: caption,
-                              sections: groupSections(groups, accounts: assets, total: total))
+        return BreakdownSheet(title: "Assets", headline: money(total), caption: caption) {
+            TypeDropdownCard(groups: groups, accounts: assets, total: total)
+        }
     }
 }
 
@@ -53,8 +111,9 @@ struct LiabilitiesSummarySheet: View {
         let debts = accounts.filter(\.isLiability)
         let total = debts.reduce(0) { $0 + dbl($1.currentBalance) }
         let caption = assetsTotal > 0 ? "Liabilities are \(Int((total / assetsTotal * 100).rounded()))% of your assets" : nil
-        return BreakdownSheet(title: "Liabilities", headline: "−" + money(total), caption: caption, tone: .spending,
-                              sections: groupSections(AccountGroup.allCases.filter(\.isLiability), accounts: debts, total: total))
+        return BreakdownSheet(title: "Liabilities", headline: "−" + money(total), caption: caption, tone: .spending) {
+            TypeDropdownCard(groups: AccountGroup.allCases.filter(\.isLiability), accounts: debts, total: total)
+        }
     }
 }
 

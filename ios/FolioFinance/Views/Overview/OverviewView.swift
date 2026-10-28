@@ -236,7 +236,7 @@ struct OverviewView: View {
     private var thisMonthCard: some View {
         let net = earnedThisMonth - spentThisMonth
         let top = max(earnedThisMonth, spentThisMonth, 1)
-        return TileButton { router.selected = .spending } content: {
+        return TileButton { UserDefaults.standard.set(SpendingHostView.Segment.spending.rawValue, forKey: SpendingHostView.segmentKey); router.selected = .spending } content: {
             Card {
                 VStack(alignment: .leading, spacing: 14) {
                     HStack {
@@ -272,7 +272,7 @@ struct OverviewView: View {
         let total = budgets.reduce(0) { $0 + $1.monthlyAmount }
         let spent = budgets.reduce(0) { $0 + $1.spent }
         let tight = budgets.filter { $0.monthlyAmount > 0 }.sorted { $0.spent / $0.monthlyAmount > $1.spent / $1.monthlyAmount }.prefix(3)
-        return TileButton { router.selected = .budget } content: {
+        return TileButton { UserDefaults.standard.set(SpendingHostView.Segment.budget.rawValue, forKey: SpendingHostView.segmentKey); router.selected = .spending } content: {
             Card {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(alignment: .firstTextBaseline) {

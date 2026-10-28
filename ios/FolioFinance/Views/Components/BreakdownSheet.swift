@@ -121,7 +121,7 @@ struct TileButton<Content: View>: View {
 }
 
 /// Lets any screen jump to another tab (for example Overview's month tile opening Spending).
-enum AppTab: Hashable { case overview, spending, budget, money, ask }
+enum AppTab: Hashable { case overview, spending, investing, money, ask }
 
 @MainActor
 final class TabRouter: ObservableObject {

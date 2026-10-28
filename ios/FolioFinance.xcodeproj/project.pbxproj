@@ -36,6 +36,8 @@
 		AA0000000000000000000117 /* MoneyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000116 /* MoneyView.swift */; };
 		AA000000000000000000011A /* AskView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000119 /* AskView.swift */; };
 		AA000000000000000000011C /* AskModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000011B /* AskModels.swift */; };
+		AA000000000000000000011F /* SpendingHostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000011E /* SpendingHostView.swift */; };
+		AA0000000000000000000122 /* InvestingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000121 /* InvestingView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -68,6 +70,8 @@
 		AA0000000000000000000116 /* MoneyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoneyView.swift; sourceTree = "<group>"; };
 		AA0000000000000000000119 /* AskView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskView.swift; sourceTree = "<group>"; };
 		AA000000000000000000011B /* AskModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskModels.swift; sourceTree = "<group>"; };
+		AA000000000000000000011E /* SpendingHostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpendingHostView.swift; sourceTree = "<group>"; };
+		AA0000000000000000000121 /* InvestingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvestingView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -144,6 +148,8 @@
 		AA0000000000000000000035 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				AA0000000000000000000120 /* Investing */,
+				AA000000000000000000011D /* Spending */,
 				AA0000000000000000000118 /* Ask */,
 				AA0000000000000000000115 /* Money */,
 				AA000000000000000000010E /* Components */,
@@ -261,6 +267,22 @@
 			path = Ask;
 			sourceTree = "<group>";
 		};
+		AA000000000000000000011D /* Spending */ = {
+			isa = PBXGroup;
+			children = (
+				AA000000000000000000011E /* SpendingHostView.swift */,
+			);
+			path = Spending;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000120 /* Investing */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000121 /* InvestingView.swift */,
+			);
+			path = Investing;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -336,6 +358,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AA0000000000000000000122 /* InvestingView.swift in Sources */,
+				AA000000000000000000011F /* SpendingHostView.swift in Sources */,
 				AA000000000000000000011C /* AskModels.swift in Sources */,
 				AA000000000000000000011A /* AskView.swift in Sources */,
 				AA0000000000000000000117 /* MoneyView.swift in Sources */,

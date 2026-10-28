@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct PlanView: View {
+    var embedded = false
     @EnvironmentObject private var auth: AuthManager
     @AppStorage("ageEntered") private var ageEntered = 0
     @State private var insights: Insights?
@@ -10,12 +11,17 @@ struct PlanView: View {
     @State private var error: String?
     @State private var showIncome = false
     @State private var showBudget = false
-    @State private var showAge = false
     @State private var creating = false
     @State private var sheet: PlanSheetKind?
 
     var body: some View {
-        NavigationStack {
+        Group {
+            if embedded { core } else { NavigationStack { core } }
+        }
+        .task { await load() }
+    }
+
+    private var core: some View {
             ZStack {
                 Wash(tone: .plan)
                 ScrollView {
@@ -32,7 +38,6 @@ struct PlanView: View {
                             incomeCard(insights).flowIn()
                             budgetCard(insights).flowIn()
                             healthCard(insights.health).flowIn()
-                            investingCard(insights.investing).flowIn()
                             Text("General information based on your own data, not financial advice.")
                                 .font(.footnote).foregroundStyle(.secondary)
                                 .multilineTextAlignment(.center).padding(.horizontal, 24).padding(.top, 4)
@@ -44,8 +49,8 @@ struct PlanView: View {
                 .refreshable { await load() }
                 .overlay { if isLoading && !loaded { ProgressView().controlSize(.large) } }
             }
-            .navigationTitle("Budget")
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { ProfileMenu() } }
+            .titledUnlessEmbedded("Budget", embedded: embedded)
+            .toolbar { if !embedded { ToolbarItem(placement: .topBarTrailing) { ProfileMenu() } } }
             .sheet(item: $sheet) { kind in sheetContent(kind) }
             .sheet(isPresented: $showIncome) {
                 IncomeSheet(current: insights?.income.monthly ?? 0, isManual: insights?.income.source == "manual") { Task { await load() } }
@@ -53,9 +58,6 @@ struct PlanView: View {
             .sheet(isPresented: $showBudget) {
                 EditBudgetSheet(lines: budgets, suggestions: insights?.budget.items ?? []) { Task { await load() } }
             }
-            .sheet(isPresented: $showAge) { AgeSheet { Task { await load() } } }
-        }
-        .task { await load() }
     }
 
     // MARK: Sheets
@@ -73,8 +75,6 @@ struct PlanView: View {
                 CategoryBudgetBreakdown(line: line)
             case .health(let metric):
                 HealthBreakdown(metric: metric, insights: insights, hasAge: ageEntered > 0)
-            case .investing:
-                InvestingBreakdown(investing: insights.investing, hasAge: ageEntered > 0) { handOff { showAge = true } }
             }
         }
     }
@@ -279,69 +279,6 @@ struct PlanView: View {
         }
     }
 
-    // MARK: Investing
-
-    private func investingCard(_ inv: Insights.Investing) -> some View {
-        VStack(spacing: 8) {
-            SectionTitle("Investing ideas")
-            Card {
-                VStack(alignment: .leading, spacing: 14) {
-                    TileButton { sheet = .investing } content: {
-                        VStack(alignment: .leading, spacing: 14) {
-                            if !inv.allocation.isEmpty {
-                                HStack(alignment: .firstTextBaseline) {
-                                    Text("Where your money sits").font(.subheadline).foregroundStyle(.secondary)
-                                    Spacer()
-                                    chevron
-                                }
-                                GeometryReader { geo in
-                                    HStack(spacing: 2) {
-                                        ForEach(Array(inv.allocation.enumerated()), id: \.offset) { idx, s in
-                                            RoundedRectangle(cornerRadius: 3).fill(sliceColor(idx))
-                                                .frame(width: max(4, (geo.size.width - CGFloat(inv.allocation.count - 1) * 2) * s.percent / 100))
-                                        }
-                                    }
-                                }
-                                .frame(height: 12).clipShape(Capsule())
-                                VStack(spacing: 8) {
-                                    ForEach(Array(inv.allocation.enumerated()), id: \.offset) { idx, s in
-                                        HStack(spacing: 8) {
-                                            Circle().fill(sliceColor(idx)).frame(width: 9, height: 9)
-                                            Text(s.label).font(.subheadline)
-                                            Spacer()
-                                            Text("\(Int(s.percent.rounded()))%").font(.caption).foregroundStyle(.secondary)
-                                            Text(money(s.amount)).font(.subheadline.weight(.semibold)).monospacedDigit().frame(minWidth: 80, alignment: .trailing).sensitive()
-                                        }
-                                    }
-                                }
-                            }
-                            ForEach(inv.notes) { n in
-                                HStack(alignment: .top, spacing: 12) {
-                                    IconBadge(symbol: n.tone == "good" ? "checkmark" : n.tone == "attention" ? "exclamationmark" : "lightbulb.fill",
-                                              color: n.tone == "good" ? .green : n.tone == "attention" ? .orange : .blue, size: 30)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(n.title).font(.subheadline.weight(.semibold))
-                                        Text(n.detail).font(.footnote).foregroundStyle(.secondary)
-                                            .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
-                                    }
-                                }
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
-                    }
-                    if ageEntered == 0 {
-                        Button { showAge = true } label: { Label("Add your age for tailored ideas", systemImage: "person.crop.circle.badge.plus") }
-                            .font(.subheadline)
-                    }
-                }
-            }
-        }
-    }
-
-    private func sliceColor(_ i: Int) -> Color {
-        [AccountGroup.cash.color, AccountGroup.savings.color, AccountGroup.investments.color, AccountGroup.other.color][i % 4]
-    }
 
     // MARK: Data
 

@@ -9,13 +9,13 @@ struct MainTabView: View {
                 .tabItem { Label("Overview", systemImage: "square.grid.2x2.fill") }
                 .tag(AppTab.overview)
 
-            SpendingView()
+            SpendingHostView()
                 .tabItem { Label("Spending", systemImage: "chart.pie.fill") }
                 .tag(AppTab.spending)
 
-            PlanView()
-                .tabItem { Label("Budget", systemImage: "dollarsign.circle.fill") }
-                .tag(AppTab.budget)
+            InvestingView()
+                .tabItem { Label("Investing", systemImage: "chart.line.uptrend.xyaxis") }
+                .tag(AppTab.investing)
 
             MoneyView()
                 .tabItem { Label("Money", systemImage: "creditcard.fill") }
