@@ -372,26 +372,49 @@ struct ProposalCard: View {
     }
 }
 
+/// Three dots that appear one at a time while the bubble stretches to fit them, then ripple until the answer arrives.
 private struct TypingBubble: View {
-    @State private var phase = 0
+    private let period = 3.4
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         HStack {
-            HStack(spacing: 6) {
-                ForEach(0..<3, id: \.self) { i in
-                    Circle().fill(Color.secondary).frame(width: 8, height: 8)
-                        .opacity(phase == i ? 1 : 0.3)
-                }
+            TimelineView(.animation) { ctx in
+                bubble(at: reduceMotion ? 1.6 : ctx.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: period))
             }
-            .padding(.horizontal, 16).padding(.vertical, 14)
-            .background(.regularMaterial, in: Capsule())
             Spacer()
         }
-        .task {
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(350))
-                withAnimation(.easeInOut(duration: 0.2)) { phase = (phase + 1) % 3 }
-            }
+    }
+
+    private func ease(_ x: Double) -> Double {
+        let t = min(max(x, 0), 1)
+        return t * t * (3 - 2 * t)
+    }
+
+    private func bubble(at t: Double) -> some View {
+        let fade: Double = 1 - ease((t - (period - 0.35)) / 0.3)
+        let pulse: Double = 1 + 0.02 * sin(t * 2 * .pi / 0.95)
+        return HStack(spacing: 0) {
+            ForEach(0..<3, id: \.self) { i in dot(i, t) }
         }
+        .padding(.horizontal, 15).padding(.vertical, 13)
+        .background(.regularMaterial, in: Capsule())
+        .scaleEffect(pulse, anchor: .leading)
+        .opacity(fade)
+    }
+
+    private func dot(_ i: Int, _ t: Double) -> some View {
+        let v: Double = ease((t - Double(i) * 0.38) / 0.34)
+        let waving = t > 1.3 && !reduceMotion
+        let wave: Double = waving ? sin((t - 1.3) * 2 * .pi / 0.95 - Double(i) * 0.9) : 0
+        let size: Double = 0.4 + 0.6 * v + 0.12 * wave
+        let alpha: Double = v * (0.7 + 0.15 * (wave + 1))
+        return Circle().fill(Color.secondary)
+            .frame(width: 8, height: 8)
+            .scaleEffect(size)
+            .opacity(alpha)
+            .offset(y: -3.5 * wave * v)
+            .frame(width: 14 * v, height: 8)
     }
 }
 

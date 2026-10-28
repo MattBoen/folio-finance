@@ -81,8 +81,10 @@ struct AccountsView: View {
                     .padding(.bottom, 24)
                 }
                 .scrollIndicators(.hidden)
-                .refreshable {
-                    await BankSync.run(auth, force: true)
+                .folioRefresh {
+                    async let banks: Void = BankSync.refreshForPull(auth)
+                    await load()
+                    await banks
                     await load()
                 }
                 .overlay { if isLoading && !loaded { ProgressView().controlSize(.large) } }
@@ -468,7 +470,7 @@ struct AccountTransactionsView: View {
             TransactionDetailView(transaction: t, all: transactions) { Task { await load() } }
         }
         .searchable(text: $searchText, prompt: "Search")
-        .refreshable { await load() }
+        .folioRefresh { await load() }
         .task { await load() }
     }
 

@@ -105,8 +105,10 @@ struct OverviewView: View {
                     .padding(.horizontal, 16)
                     .padding(.bottom, 24)
                 }
-                .refreshable {
-                    await BankSync.run(auth, force: true)
+                .folioRefresh {
+                    async let banks: Void = BankSync.refreshForPull(auth)
+                    await load()
+                    await banks
                     await load()
                 }
                 .overlay {

@@ -155,3 +155,27 @@ struct PeriodChangeBadge: View {
         }
     }
 }
+
+// MARK: - Pull to refresh
+
+extension View {
+    /// Pull to refresh that finishes its work even if SwiftUI cancels the gesture's task part way, and taps a light haptic when done.
+    func folioRefresh(_ work: @escaping @MainActor () async -> Void) -> some View {
+        refreshable {
+            await Task { await work() }.value
+            UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+        }
+    }
+}
+
+extension BankSync {
+    /// Asks the banks for new data but never makes a pull-to-refresh wait more than a few seconds for them.
+    static func refreshForPull(_ auth: AuthManager) async {
+        await withTaskGroup(of: Void.self) { g in
+            g.addTask { await BankSync.run(auth, force: true) }
+            g.addTask { try? await Task.sleep(for: .seconds(6)) }
+            await g.next()
+            g.cancelAll()
+        }
+    }
+}

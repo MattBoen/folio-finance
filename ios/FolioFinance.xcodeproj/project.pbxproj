@@ -12,6 +12,7 @@
 		32B0BE3F0831ED0599E3D393 /* WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 803263EA63F9DF978A85041C /* WidgetSnapshot.swift */; };
 		3BA7E5F77B8043A3E8AACE12 /* FolioWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E186547C3473C27CA4F71538 /* FolioWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		65BB346EAF6A169CC41F67A6 /* Motion.swift in Sources */ = {isa = PBXBuildFile; fileRef = E321F9B99F432A14479E3FF0 /* Motion.swift */; };
+		992D2A2A6B5789DA3116E58B /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 638AD0F354906F476427E6AC /* SettingsView.swift */; };
 		A1CB8BD672669AFC2B600B15 /* WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 803263EA63F9DF978A85041C /* WidgetSnapshot.swift */; };
 		AA0000000000000000000020 /* FolioFinanceApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000010 /* FolioFinanceApp.swift */; };
 		AA0000000000000000000021 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000011 /* APIClient.swift */; };
@@ -73,6 +74,7 @@
 /* Begin PBXFileReference section */
 		41E774D9A553AA31181E7193 /* FolioWidgets.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FolioWidgets.swift; sourceTree = "<group>"; };
 		58258D68C3BF9B6BF5F45995 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		638AD0F354906F476427E6AC /* SettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		803263EA63F9DF978A85041C /* WidgetSnapshot.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WidgetSnapshot.swift; sourceTree = "<group>"; };
 		87A5069034F52FF62A087482 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		91EBDF72A50B987F6D55A772 /* FolioFinance.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = FolioFinance.entitlements; sourceTree = "<group>"; };
@@ -139,6 +141,15 @@
 			);
 			name = Shared;
 			path = Shared;
+			sourceTree = "<group>";
+		};
+		4E2A0775732F68BCB93C113D /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				638AD0F354906F476427E6AC /* SettingsView.swift */,
+			);
+			name = Settings;
+			path = Settings;
 			sourceTree = "<group>";
 		};
 		56FADE518003226196B649BC /* FolioWidgets */ = {
@@ -251,6 +262,7 @@
 				AA000000000000000000003B /* Budget */,
 				AA000000000000000000003C /* Plaid */,
 				E321F9B99F432A14479E3FF0 /* Motion.swift */,
+				4E2A0775732F68BCB93C113D /* Settings */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -504,6 +516,7 @@
 				AA0000000000000000000030 /* PlaidLinkSheet.swift in Sources */,
 				32B0BE3F0831ED0599E3D393 /* WidgetSnapshot.swift in Sources */,
 				65BB346EAF6A169CC41F67A6 /* Motion.swift in Sources */,
+				992D2A2A6B5789DA3116E58B /* SettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

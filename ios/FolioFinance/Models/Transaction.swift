@@ -15,10 +15,11 @@ struct Transaction: Identifiable, Codable, Sendable, Hashable {
     let isExcluded: Bool
     let lat: Double?
     let lon: Double?
+    let place: String?
 
     private enum CodingKeys: String, CodingKey {
         case id, accountId, accountName, amount, date, name, userName, merchantName
-        case categoryName, note, isPending, isExcluded, lat, lon
+        case categoryName, note, isPending, isExcluded, lat, lon, place
     }
 
     init(from decoder: Decoder) throws {
@@ -37,6 +38,7 @@ struct Transaction: Identifiable, Codable, Sendable, Hashable {
         isExcluded = try c.decodeIfPresent(Bool.self, forKey: .isExcluded) ?? false
         lat = Self.flexibleDouble(c, .lat)
         lon = Self.flexibleDouble(c, .lon)
+        place = try c.decodeIfPresent(String.self, forKey: .place)
     }
 
     /// The server sends coordinates as numeric strings (Postgres numeric) or numbers, or null.

@@ -123,6 +123,8 @@ export const transactions = pgTable(
     isExcluded: boolean("is_excluded").notNull().default(false),
     lat: numeric("lat", { precision: 10, scale: 7 }),
     lon: numeric("lon", { precision: 10, scale: 7 }),
+    // Street address the bank reported for the purchase, when it did: "123 Main St, Minot, ND 58701".
+    place: text("place"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),

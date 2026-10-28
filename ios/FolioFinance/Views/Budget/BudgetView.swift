@@ -92,7 +92,7 @@ struct SpendingView: View {
                     .padding(.horizontal, 16)
                     .padding(.bottom, 24)
                 }
-                .refreshable { await load() }
+                .folioRefresh { await load() }
                 .overlay { if isLoading && !loaded { ProgressView().controlSize(.large) } }
             }
             .titledUnlessEmbedded("Spending", embedded: embedded)
@@ -161,15 +161,19 @@ struct SpendingView: View {
                         if let focus {
                             Text("\(Int((focus.value / total * 100).rounded()))% of spending")
                                 .font(.caption).foregroundStyle(.secondary)
-                        } else if previousSpent > 0 {
-                            let change = (spent - previousSpent) / previousSpent
-                            Label("\(Int((abs(change) * 100).rounded()))% vs last month",
-                                  systemImage: change <= 0 ? "arrow.down.right" : "arrow.up.right")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(change <= 0 ? Color.up : Color.down)
                         }
                     }
                     .animation(.snappy, value: selected)
+                }
+                if focus == nil, previousSpent > 0 {
+                    let change = (spent - previousSpent) / previousSpent
+                    let tint = change <= 0 ? Color.up : Color.down
+                    Label("\(Int((abs(change) * 100).rounded()))% \(change <= 0 ? "less" : "more") than last month",
+                          systemImage: change <= 0 ? "arrow.down.right" : "arrow.up.right")
+                        .font(.subheadline.weight(.semibold)).foregroundStyle(tint)
+                        .padding(.horizontal, 12).padding(.vertical, 6)
+                        .background(tint.opacity(0.14), in: Capsule())
+                        .transition(.opacity.combined(with: .scale(scale: 0.9)))
                 }
             }
         }

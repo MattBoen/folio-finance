@@ -54,7 +54,7 @@ struct TransactionsView: View {
             }
             .titledUnlessEmbedded("Activity", embedded: embedded)
             .modifier(OptionalSearch(enabled: !embedded, text: $searchText))
-            .refreshable { await load() }
+            .folioRefresh { await load() }
             .toolbar {
                 if active {
                     ToolbarItem(placement: .topBarTrailing) {

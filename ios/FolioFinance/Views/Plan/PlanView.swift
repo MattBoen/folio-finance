@@ -47,7 +47,7 @@ struct PlanView: View {
                     .padding(.horizontal, 16).padding(.bottom, 24)
                 }
                 .scrollIndicators(.hidden)
-                .refreshable { await load() }
+                .folioRefresh { await load() }
                 .overlay { if isLoading && !loaded { ProgressView().controlSize(.large) } }
             }
             .titledUnlessEmbedded("Budget", embedded: embedded)

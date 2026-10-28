@@ -30,6 +30,7 @@ const txSelect = {
   isExcluded: transactions.isExcluded,
   lat: transactions.lat,
   lon: transactions.lon,
+  place: transactions.place,
 };
 
 function fromTx(q: any) {

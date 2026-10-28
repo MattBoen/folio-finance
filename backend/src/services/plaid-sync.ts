@@ -166,6 +166,7 @@ async function upsertTransactions(txns: Transaction[], userId: string): Promise<
         categoryId,
         lat: txn.location?.lat?.toString() ?? null,
         lon: txn.location?.lon?.toString() ?? null,
+        place: placeOf(txn),
       })
       .onConflictDoUpdate({
         target: transactions.plaidTransactionId,
@@ -175,10 +176,22 @@ async function upsertTransactions(txns: Transaction[], userId: string): Promise<
           merchantName: txn.merchant_name ?? null,
           isPending: txn.pending,
           categoryId,
+          lat: txn.location?.lat?.toString() ?? null,
+          lon: txn.location?.lon?.toString() ?? null,
+          place: placeOf(txn),
           updatedAt: new Date(),
         },
       });
   }
+}
+
+/** The purchase's street address from the bank, if it gave one. */
+function placeOf(txn: Transaction): string | null {
+  const l = txn.location;
+  if (!l) return null;
+  const cityLine = [l.city, [l.region, l.postal_code].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+  const full = [l.address, cityLine].filter(Boolean).join(", ");
+  return full || null;
 }
 
 async function removeTransactions(plaidTxnIds: string[]): Promise<void> {

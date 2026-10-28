@@ -188,57 +188,20 @@ struct BrandMark: View {
 struct ProfileMenu: View {
     @EnvironmentObject private var auth: AuthManager
     @AppStorage("hideAmounts") private var hide = false
-    @ObservedObject private var ask = AskState.shared
-    @State private var confirmSignOut = false
-    @State private var showSetup = false
-    @State private var showDelete = false
-    @State private var deletePassword = ""
-    @State private var deleteError: String?
+    @State private var showSettings = false
 
     var body: some View {
         Menu {
             Section(auth.isDemo ? "Sample data" : (auth.currentEmail ?? "Your account")) {
                 if auth.isDemo { Text("Changes aren't saved in demo mode") }
             }
-            if !auth.isDemo {
-                Button { showSetup = true } label: { Label("Set up Folio", systemImage: "wand.and.stars") }
-            }
+            Button { showSettings = true } label: { Label("Settings and account", systemImage: "gearshape") }
             Toggle(isOn: $hide) { Label("Hide amounts", systemImage: "eye.slash") }
-            Toggle(isOn: Binding(get: { ask.enabled }, set: { on in Task { _ = await ask.set(on, auth: auth) } })) {
-                Label("Ask Folio", systemImage: "text.bubble")
-            }
-            Link(destination: AppLinks.privacy) { Label("Privacy Policy", systemImage: "hand.raised") }
-            Link(destination: AppLinks.support) { Label("Contact Support", systemImage: "envelope") }
-            if !auth.isDemo {
-                Button(role: .destructive) { deleteError = nil; deletePassword = ""; showDelete = true } label: {
-                    Label("Delete Account", systemImage: "trash")
-                }
-            }
-            Button(role: .destructive) { confirmSignOut = true } label: {
-                Label(auth.isDemo ? "Exit demo" : "Sign out", systemImage: "rectangle.portrait.and.arrow.right")
-            }
         } label: {
             Image(systemName: "person.crop.circle")
                 .accessibilityLabel("Account and settings")
         }
-        .fullScreenCover(isPresented: $showSetup) { OnboardingFlow { showSetup = false } }
-        .alert("Delete your account?", isPresented: $showDelete) {
-            SecureField("Password", text: $deletePassword)
-            Button("Delete Everything", role: .destructive) {
-                Task {
-                    if let message = await auth.deleteAccount(password: deletePassword) { deleteError = message }
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This permanently deletes your accounts, transactions, budgets and settings, and disconnects your banks. It can't be undone. Enter your password to confirm.")
-        }
-        .alert("Couldn't delete account", isPresented: Binding(get: { deleteError != nil }, set: { if !$0 { deleteError = nil } })) {
-            Button("OK", role: .cancel) {}
-        } message: { Text(deleteError ?? "") }
-        .confirmationDialog(auth.isDemo ? "Exit the demo?" : "Sign out of Folio?", isPresented: $confirmSignOut, titleVisibility: .visible) {
-            Button(auth.isDemo ? "Exit demo" : "Sign out", role: .destructive) { auth.logout() }
-        }
+        .sheet(isPresented: $showSettings) { SettingsView() }
     }
 }
 
