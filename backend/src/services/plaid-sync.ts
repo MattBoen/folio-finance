@@ -63,7 +63,8 @@ async function syncTransactions(
   userId: string,
   accessToken: string
 ): Promise<void> {
-  let cursor = item.transactionCursor ?? undefined;
+  // Start from scratch once so older purchases pick up the locations the bank reports.
+  let cursor = item.placesBackfilled ? item.transactionCursor ?? undefined : undefined;
   let hasMore = true;
 
   while (hasMore) {
@@ -81,7 +82,7 @@ async function syncTransactions(
 
   await db
     .update(plaidItems)
-    .set({ transactionCursor: cursor, updatedAt: new Date() })
+    .set({ transactionCursor: cursor, placesBackfilled: true, updatedAt: new Date() })
     .where(eq(plaidItems.id, item.id));
 }
 

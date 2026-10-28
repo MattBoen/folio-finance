@@ -409,6 +409,7 @@ struct AccountTransactionsView: View {
     @State private var showEdit = false
     @State private var detail: Transaction?
     @State private var title = ""
+    @Environment(\.dismiss) private var dismissDetail
 
     private var filtered: [Transaction] {
         guard !searchText.isEmpty else { return transactions }
@@ -428,6 +429,7 @@ struct AccountTransactionsView: View {
                     HStack(spacing: 12) {
                         IconBadge(symbol: account.group.symbol, color: account.group.color, size: 44)
                         VStack(alignment: .leading, spacing: 2) {
+                            Text(title.isEmpty ? account.name : title).font(.headline).lineLimit(1)
                             Text((account.isLiability ? "−" : "") + money(account.currentBalance, cents: true))
                                 .font(.title2.bold()).monospacedDigit().sensitive()
                             Text(account.isLiability ? "Amount owed" : "Current balance")
@@ -463,6 +465,12 @@ struct AccountTransactionsView: View {
         .navigationTitle(title.isEmpty ? account.name : title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .topBarTrailing) { Button(account.isManual ? "Edit" : "Rename") { showEdit = true } } }
+        .onReceive(NotificationCenter.default.publisher(for: .accountRemoved)) { n in
+            if n.userInfo?["id"] as? String == account.id { dismissDetail() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .accountRenamed)) { n in
+            if n.userInfo?["id"] as? String == account.id, let name = n.userInfo?["name"] as? String { title = name }
+        }
         .sheet(isPresented: $showEdit) {
             EditAccountSheet(account: account) { Task { await rename() } }
         }
@@ -633,6 +641,7 @@ struct EditAccountSheet: View {
     @State private var balanceText: String
     @State private var saving = false
     @State private var error: String?
+    @State private var confirmRemove = false
 
     init(account: Account, onSaved: @escaping () -> Void) {
         self.account = account
@@ -663,6 +672,19 @@ struct EditAccountSheet: View {
                     }
                 }
                 if let error { Section { Text(error).foregroundStyle(.red).font(.footnote) } }
+                Section {
+                    Button(role: .destructive) { confirmRemove = true } label: {
+                        Text(account.isManual ? "Delete Account" : "Hide Account")
+                            .font(.headline).frame(maxWidth: .infinity).frame(height: 30)
+                    }
+                    .buttonStyle(.borderedProminent).tint(.red).controlSize(.large)
+                    .listRowBackground(Color.clear).listRowInsets(EdgeInsets())
+                } footer: {
+                    Text(account.isManual ? "Removes it from your net worth and history. This can't be undone." : "Connected accounts can't be deleted, because your bank keeps sending them. Hiding removes it from your net worth and totals, and you can show it again from Accounts.")
+                }
+            }
+            .confirmationDialog(account.isManual ? "Delete \(account.name)?" : "Hide \(account.name)?", isPresented: $confirmRemove, titleVisibility: .visible) {
+                Button(account.isManual ? "Delete" : "Hide", role: .destructive) { Task { await remove() } }
             }
             .navigationTitle(account.isManual ? "Edit Account" : "Rename Account")
             .navigationBarTitleDisplayMode(.inline)
@@ -679,12 +701,33 @@ struct EditAccountSheet: View {
         .presentationDetents([.medium, .large])
     }
 
+    private func remove() async {
+        saving = true
+        error = nil
+        do {
+            if account.isManual {
+                let _: AnyDecodable = try await auth.withFreshToken(.deleteAccount(id: account.id))
+            } else {
+                let _: AnyDecodable = try await auth.withFreshToken(.setAccountHidden(id: account.id, hidden: true))
+            }
+            NotificationCenter.default.post(name: .accountRemoved, object: nil, userInfo: ["id": account.id])
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            onSaved()
+            dismiss()
+        } catch {
+            self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+        saving = false
+    }
+
     private func save() async {
         saving = true
         error = nil
         do {
             if !account.isManual {
-                let _: AccountResponse = try await auth.withFreshToken(.renameAccount(id: account.id, name: name.trimmingCharacters(in: .whitespaces)))
+                let newName = name.trimmingCharacters(in: .whitespaces)
+                let _: AccountResponse = try await auth.withFreshToken(.renameAccount(id: account.id, name: newName))
+                NotificationCenter.default.post(name: .accountRenamed, object: nil, userInfo: ["id": account.id, "name": newName])
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
                 onSaved(); dismiss(); saving = false
                 return
@@ -694,6 +737,7 @@ struct EditAccountSheet: View {
                 id: account.id, name: name.trimmingCharacters(in: .whitespaces), balance: balance,
                 institutionName: institution.trimmingCharacters(in: .whitespaces).nilIfEmpty
             ))
+            NotificationCenter.default.post(name: .accountRenamed, object: nil, userInfo: ["id": account.id, "name": name.trimmingCharacters(in: .whitespaces)])
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             onSaved()
             dismiss()
@@ -706,3 +750,8 @@ struct EditAccountSheet: View {
 
 // Catch-all decodable for endpoints whose response body we ignore
 struct AnyDecodable: Decodable, Sendable {}
+
+extension Notification.Name {
+    static let accountRemoved = Notification.Name("accountRemoved")
+    static let accountRenamed = Notification.Name("accountRenamed")
+}

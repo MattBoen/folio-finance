@@ -4,6 +4,43 @@ import Charts
 
 // MARK: - Place lookup (shared cache, one search at a time)
 
+/// One quick look at where the phone is, used only to keep merchant searches in the right town. Never sent anywhere.
+@MainActor
+private final class DeviceLocation: NSObject, CLLocationManagerDelegate {
+    private let manager = CLLocationManager()
+    private var waiting: CheckedContinuation<CLLocationCoordinate2D?, Never>?
+
+    func current() async -> CLLocationCoordinate2D? {
+        manager.delegate = self
+        manager.desiredAccuracy = kCLLocationAccuracyKilometer
+        switch manager.authorizationStatus {
+        case .denied, .restricted: return nil
+        case .notDetermined: manager.requestWhenInUseAuthorization()
+        default: manager.requestLocation()
+        }
+        return await withCheckedContinuation { waiting = $0 }
+    }
+
+    nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        let status = manager.authorizationStatus
+        Task { @MainActor in
+            switch status {
+            case .authorizedWhenInUse, .authorizedAlways: self.manager.requestLocation()
+            case .denied, .restricted: finish(nil)
+            default: break
+            }
+        }
+    }
+    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        let c = locations.last?.coordinate
+        Task { @MainActor in finish(c) }
+    }
+    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        Task { @MainActor in finish(nil) }
+    }
+    private func finish(_ c: CLLocationCoordinate2D?) { waiting?.resume(returning: c); waiting = nil }
+}
+
 /// Finds where a purchase happened. In order of trust: the pin the bank sent, the street address the bank sent,
 /// then a search for the merchant that only counts when it lands near where this customer actually shops.
 @MainActor
@@ -17,6 +54,9 @@ final class PlaceLocator {
         return CLLocationCoordinate2D(latitude: d.double(forKey: "placeAnchorLat"), longitude: d.double(forKey: "placeAnchorLon"))
     }()
 
+    private let device = DeviceLocation()
+    private var deviceAnchor: CLLocationCoordinate2D?
+    private var triedDevice = false
     private var cache: [String: CLLocationCoordinate2D] = [:]
     private var missing = Set<String>()
     private var tail: Task<Void, Never> = Task {}
@@ -71,7 +111,11 @@ final class PlaceLocator {
         }
 
         // Otherwise search by name, but only trust a result close to where this customer shops.
-        guard let anchor else { missing.insert(t.id); return nil }
+        if anchor == nil, deviceAnchor == nil, !triedDevice {
+            triedDevice = true
+            deviceAnchor = await device.current()
+        }
+        guard let anchor = anchor ?? deviceAnchor else { missing.insert(t.id); return nil }
         let previous = tail
         let name = t.displayName
         let near = nearMeters

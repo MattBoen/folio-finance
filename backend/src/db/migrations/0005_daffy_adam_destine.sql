@@ -1,0 +1,1 @@
+ALTER TABLE "plaid_items" ADD COLUMN "places_backfilled" boolean DEFAULT false NOT NULL;

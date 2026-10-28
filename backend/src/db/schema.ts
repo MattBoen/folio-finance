@@ -58,6 +58,8 @@ export const plaidItems = pgTable(
     institutionName: text("institution_name"),
     status: text("status", { enum: ["active", "login_required", "error"] }).notNull().default("active"),
     transactionCursor: text("transaction_cursor"),
+    // Set once the full history has been re-read to pick up purchase locations.
+    placesBackfilled: boolean("places_backfilled").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
