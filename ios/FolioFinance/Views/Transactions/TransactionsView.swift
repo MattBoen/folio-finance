@@ -1,6 +1,9 @@
 import SwiftUI
 
 struct TransactionsView: View {
+    /// True when hosted inside the Money tab, which supplies the navigation stack and title.
+    var embedded = false
+
     @EnvironmentObject private var auth: AuthManager
     @State private var transactions: [Transaction] = []
     @State private var isLoading = false
@@ -24,7 +27,13 @@ struct TransactionsView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        Group {
+            if embedded { core } else { NavigationStack { core } }
+        }
+        .task { await load() }
+    }
+
+    private var core: some View {
             ZStack {
                 Wash(tone: .activity)
                 if loaded && transactions.isEmpty && error == nil {
@@ -39,7 +48,7 @@ struct TransactionsView: View {
                     listView
                 }
             }
-            .navigationTitle("Activity")
+            .titledUnlessEmbedded("Activity", embedded: embedded)
             .searchable(text: $searchText, prompt: "Search transactions")
             .refreshable { await load() }
             .toolbar {
@@ -51,43 +60,57 @@ struct TransactionsView: View {
             .sheet(item: $detail) { t in
                 TransactionDetailView(transaction: t, all: transactions) { Task { await load() } }
             }
-        }
-        .task { await load() }
     }
 
     private var listView: some View {
-        List {
-            if let error {
-                ErrorBanner(message: error) { Task { await load() } }
-                    .listRowBackground(Color.clear).listRowInsets(.init()).listRowSeparator(.hidden)
-            }
-            ForEach(grouped, id: \.key) { date, txns in
-                Section {
-                    ForEach(txns) { txn in
-                        Button { detail = txn } label: {
-                            TransactionRow(transaction: txn)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .listRowBackground(Rectangle().fill(.regularMaterial))
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            Button(role: .destructive) { Task { await delete(txn) } } label: {
-                                Label("Delete", systemImage: "trash")
+        ScrollView {
+            LazyVStack(spacing: 14) {
+                if let error { ErrorBanner(message: error) { Task { await load() } } }
+                if !searchText.isEmpty && filtered.isEmpty {
+                    EmptyStateCard(symbol: "magnifyingglass", title: "No matches", message: "Try a different merchant, category or account.")
+                }
+                ForEach(grouped, id: \.key) { date, txns in
+                    VStack(spacing: 8) {
+                        SectionTitle(dayHeader(date), trailing: dayTotal(txns))
+                        Card(padding: 0) {
+                            VStack(spacing: 0) {
+                                ForEach(txns) { txn in
+                                    Button { detail = txn } label: {
+                                        TransactionRow(transaction: txn)
+                                            .padding(.horizontal, 16).padding(.vertical, 10)
+                                            .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(PressableRowStyle())
+                                    .contextMenu {
+                                        Button { Task { await setExcluded(txn, !txn.isExcluded) } } label: {
+                                            Label(txn.isExcluded ? "Include in spending" : "Exclude from spending",
+                                                  systemImage: txn.isExcluded ? "eye" : "eye.slash")
+                                        }
+                                        Button(role: .destructive) { Task { await delete(txn) } } label: {
+                                            Label("Delete", systemImage: "trash")
+                                        }
+                                    }
+                                    if txn.id != txns.last?.id { Divider().padding(.leading, 66) }
+                                }
                             }
-                            Button { Task { await setExcluded(txn, !txn.isExcluded) } } label: {
-                                Label(txn.isExcluded ? "Include" : "Exclude",
-                                      systemImage: txn.isExcluded ? "eye" : "eye.slash")
-                            }
-                            .tint(.gray)
                         }
                     }
-                } header: {
-                    Text(dayHeader(date))
+                    .flowIn()
                 }
             }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 24)
         }
-        .scrollContentBackground(.hidden)
+        .scrollIndicators(.hidden)
+        .scrollDismissesKeyboard(.interactively)
         .overlay { if isLoading && !loaded { ProgressView().controlSize(.large) } }
+    }
+
+    /// Net of the day's counted transactions, shown quietly beside the day header.
+    private func dayTotal(_ rows: [Transaction]) -> String? {
+        let net = rows.filter { !$0.isExcluded }.reduce(0.0) { $0 - $1.doubleAmount }
+        guard net != 0 else { return nil }
+        return (net > 0 ? "+" : "−") + money(abs(net))
     }
 
     private func load() async {
@@ -128,6 +151,15 @@ struct TransactionsView: View {
 
 // MARK: - Row
 
+/// A subtle press highlight for rows inside a card.
+struct PressableRowStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(configuration.isPressed ? Color.primary.opacity(0.06) : .clear)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
 struct TransactionRow: View {
     let transaction: Transaction
 
@@ -153,7 +185,6 @@ struct TransactionRow: View {
                 .sensitive()
         }
         .opacity(transaction.isExcluded ? 0.5 : 1)
-        .padding(.vertical, 2)
     }
 }
 

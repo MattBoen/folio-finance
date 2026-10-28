@@ -147,6 +147,11 @@ final class AuthManager: ObservableObject {
         UserDefaults.standard.set(seen, forKey: "setupSeenEmails")
     }
 
+    var currentEmail: String? {
+        if isDemo { return nil }
+        return UserDefaults.standard.string(forKey: "currentEmail")
+    }
+
     func startDemo() {
         isDemo = true
         isAuthenticated = true
@@ -214,6 +219,15 @@ enum DemoData {
             let decoder = JSONDecoder(); decoder.keyDecodingStrategy = .convertFromSnakeCase
             return try decoder.decode(T.self, from: data)
         }
+        if endpoint.path == "/ask" {
+            return try decodeDemo(askResponse(for: endpoint))
+        }
+        if endpoint.path == "/ask/confirm" {
+            throw APIError.server(403, "Changes aren't saved in demo mode.")
+        }
+        if endpoint.path == "/ask/dismiss" {
+            return try decodeDemo([String: Any]())
+        }
         guard endpoint.method == "GET" else {
             throw APIError.server(403, "Demo mode is read-only. Create a free account to save your own data.")
         }
@@ -267,6 +281,59 @@ enum DemoData {
                     ["id": "b3", "category": "Dining", "monthlyAmount": 220, "spent": 187], ["id": "b4", "category": "Transport", "monthlyAmount": 280, "spent": 301],
                     ["id": "b5", "category": "Shopping", "monthlyAmount": 250, "spent": 96]],
     ]
+
+    private static func decodeDemo<T: Decodable>(_ object: [String: Any]) throws -> T {
+        let data = try JSONSerialization.data(withJSONObject: object)
+        let decoder = JSONDecoder(); decoder.keyDecodingStrategy = .convertFromSnakeCase
+        return try decoder.decode(T.self, from: data)
+    }
+
+    /// Canned answers for the suggested questions, so Ask can be tried without a server.
+    private static func askResponse(for endpoint: Endpoint) -> [String: Any] {
+        var last = ""
+        if let body = endpoint.body,
+           let obj = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+           let msgs = obj["messages"] as? [[String: Any]],
+           let text = msgs.last?["content"] as? String { last = text.lowercased() }
+
+        if last.contains("raise") || last.contains("increase") {
+            return [
+                "answer": "Groceries is $760 a month and you're at $610, so there's room, but you've been close to the limit in two of the last four months. Raising it to $850 would cover your usual pace with a little to spare.",
+                "facts": [["label": "Groceries budget", "value": "$760"], ["label": "Spent this month", "value": "$610"], ["label": "Average, last 3 months", "value": "$812"]],
+                "proposal": ["id": "demo-proposal", "kind": "budget", "title": "Raise your groceries budget",
+                             "detail": "Based on what you've spent over the last three months.",
+                             "category": "Groceries", "current_amount": 760, "new_amount": 850],
+            ]
+        }
+        if last.contains("s&p") || last.contains("s & p") || last.contains("benchmark") {
+            return [
+                "answer": "A rough comparison: your investment accounts grew about 9.8% so far this year, and the S&P 500 is up about 12.4% over the same stretch. Part of your growth comes from contributions, so this isn't a precise performance number.",
+                "facts": [["label": "Your investments, year to date", "value": "+9.8%"], ["label": "S&P 500, year to date", "value": "+12.4%"]],
+            ]
+        }
+        if last.contains("saving") || last.contains("invest") {
+            return [
+                "answer": "You're keeping about 40% of your income this month, well above the 15% many people aim for. Most of the rest sits in investments and savings.",
+                "facts": [["label": "Income this month", "value": "$6,300"], ["label": "Spent this month", "value": "$3,770"], ["label": "Savings rate", "value": "40%"]],
+            ]
+        }
+        if last.contains("dining") || last.contains("restaurant") || last.contains("coffee") {
+            return [
+                "answer": "You've spent $187 on dining this month, about 85% of your $220 dining budget, with 4 days left.",
+                "facts": [["label": "Dining this month", "value": "$187"], ["label": "Dining budget", "value": "$220"], ["label": "Left", "value": "$33"]],
+            ]
+        }
+        if last.contains("budget") {
+            return [
+                "answer": "Your October budget is $3,560. You've spent $2,948 so far, which leaves $612 for the rest of the month. Transport is the only category over its limit.",
+                "facts": [["label": "Budget", "value": "$3,560"], ["label": "Spent", "value": "$2,948"], ["label": "Left", "value": "$612"], ["label": "Over limit", "value": "Transport (+$21)"]],
+            ]
+        }
+        return [
+            "answer": "This is sample data, so I can answer a handful of questions here. Try one of the suggestions, or create an account to ask about your own numbers.",
+            "facts": [],
+        ]
+    }
 
     private static func query(_ path: String) -> [String: String] {
         guard let items = URLComponents(string: "https://demo.local" + path)?.queryItems else { return [:] }

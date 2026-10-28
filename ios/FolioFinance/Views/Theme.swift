@@ -191,6 +191,7 @@ struct BrandMark: View {
 struct ProfileMenu: View {
     @EnvironmentObject private var auth: AuthManager
     @AppStorage("hideAmounts") private var hide = false
+    @ObservedObject private var ask = AskState.shared
     @State private var confirmSignOut = false
     @State private var showSetup = false
     @State private var showDelete = false
@@ -199,12 +200,15 @@ struct ProfileMenu: View {
 
     var body: some View {
         Menu {
+            Section(auth.isDemo ? "Sample data" : (auth.currentEmail ?? "Your account")) {
+                if auth.isDemo { Text("Changes aren't saved in demo mode") }
+            }
             if !auth.isDemo {
                 Button { showSetup = true } label: { Label("Set up Folio", systemImage: "wand.and.stars") }
             }
             Toggle(isOn: $hide) { Label("Hide amounts", systemImage: "eye.slash") }
-            if auth.isDemo {
-                Section("Sample data") { Text("Changes aren't saved in demo mode") }
+            Toggle(isOn: Binding(get: { ask.enabled }, set: { on in Task { _ = await ask.set(on, auth: auth) } })) {
+                Label("Ask Folio", systemImage: "text.bubble")
             }
             Link(destination: AppLinks.privacy) { Label("Privacy Policy", systemImage: "hand.raised") }
             Link(destination: AppLinks.support) { Label("Contact Support", systemImage: "envelope") }
@@ -218,6 +222,7 @@ struct ProfileMenu: View {
             }
         } label: {
             Image(systemName: "person.crop.circle")
+                .accessibilityLabel("Account and settings")
         }
         .fullScreenCover(isPresented: $showSetup) { OnboardingFlow { showSetup = false } }
         .alert("Delete your account?", isPresented: $showDelete) {

@@ -11,7 +11,7 @@ import { computeInsightsForUser, loadInsightInputs, todayIso } from "../services
 
 const router = new Hono();
 
-async function budgetsResponse(userId: string) {
+export async function budgetsResponse(userId: string) {
   const now = todayIso();
   const month = now.slice(0, 7);
   const monthStart = `${month}-01`;

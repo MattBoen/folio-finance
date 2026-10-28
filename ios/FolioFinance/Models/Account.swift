@@ -75,7 +75,7 @@ enum AccountGroup: String, CaseIterable, Identifiable, Sendable {
     case cash = "Cash"
     case savings = "Savings"
     case investments = "Investments"
-    case other = "Other Assets"
+    case other = "Physical Assets"
     case credit = "Credit Cards"
     case loans = "Loans"
 
@@ -98,7 +98,7 @@ enum AccountGroup: String, CaseIterable, Identifiable, Sendable {
         case .cash: "banknote.fill"
         case .savings: "leaf.fill"
         case .investments: "chart.line.uptrend.xyaxis"
-        case .other: "cube.fill"
+        case .other: "car.fill"
         case .credit: "creditcard.fill"
         case .loans: "building.columns.fill"
         }

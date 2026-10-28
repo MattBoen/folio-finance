@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { userSettings } from "../db/schema.js";
 import { requireAuth } from "../middleware/auth.js";
+import { getAskSettings, setAskEnabled } from "../services/ask-store.js";
 
 const router = new Hono();
 
@@ -48,6 +49,16 @@ router.put(
       .onConflictDoUpdate({ target: userSettings.userId, set: { birthYear, updatedAt: new Date() } });
     return c.json(await current(userId));
   }
+);
+
+// Ask Folio is opt-in and off by default.
+router.get("/ask", requireAuth, async (c) => c.json(await getAskSettings(c.get("auth").userId)));
+
+router.put(
+  "/ask",
+  requireAuth,
+  zValidator("json", z.object({ enabled: z.boolean() })),
+  async (c) => c.json(await setAskEnabled(c.get("auth").userId, c.req.valid("json").enabled))
 );
 
 export { router as settingsRouter };

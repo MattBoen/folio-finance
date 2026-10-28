@@ -30,6 +30,12 @@
 		AA0000000000000000000108 /* OnboardingFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000107 /* OnboardingFlow.swift */; };
 		AA000000000000000000010B /* CarEntryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000010A /* CarEntryView.swift */; };
 		AA000000000000000000010D /* TransactionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000010C /* TransactionDetailView.swift */; };
+		AA0000000000000000000110 /* BreakdownSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000010F /* BreakdownSheet.swift */; };
+		AA0000000000000000000112 /* SummarySheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000111 /* SummarySheets.swift */; };
+		AA0000000000000000000114 /* PlanSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000113 /* PlanSheets.swift */; };
+		AA0000000000000000000117 /* MoneyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000116 /* MoneyView.swift */; };
+		AA000000000000000000011A /* AskView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000119 /* AskView.swift */; };
+		AA000000000000000000011C /* AskModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000011B /* AskModels.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -56,6 +62,12 @@
 		AA0000000000000000000107 /* OnboardingFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFlow.swift; sourceTree = "<group>"; };
 		AA000000000000000000010A /* CarEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarEntryView.swift; sourceTree = "<group>"; };
 		AA000000000000000000010C /* TransactionDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionDetailView.swift; sourceTree = "<group>"; };
+		AA000000000000000000010F /* BreakdownSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BreakdownSheet.swift; sourceTree = "<group>"; };
+		AA0000000000000000000111 /* SummarySheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SummarySheets.swift; sourceTree = "<group>"; };
+		AA0000000000000000000113 /* PlanSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanSheets.swift; sourceTree = "<group>"; };
+		AA0000000000000000000116 /* MoneyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoneyView.swift; sourceTree = "<group>"; };
+		AA0000000000000000000119 /* AskView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskView.swift; sourceTree = "<group>"; };
+		AA000000000000000000011B /* AskModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskModels.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -132,6 +144,9 @@
 		AA0000000000000000000035 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				AA0000000000000000000118 /* Ask */,
+				AA0000000000000000000115 /* Money */,
+				AA000000000000000000010E /* Components */,
 				AA0000000000000000000109 /* Vehicle */,
 				AA0000000000000000000106 /* Onboarding */,
 				AA0000000000000000000101 /* Plan */,
@@ -157,6 +172,7 @@
 		AA0000000000000000000038 /* Overview */ = {
 			isa = PBXGroup;
 			children = (
+				AA0000000000000000000111 /* SummarySheets.swift */,
 				AA0000000000000000000017 /* OverviewView.swift */,
 			);
 			path = Overview;
@@ -198,6 +214,7 @@
 		AA0000000000000000000101 /* Plan */ = {
 			isa = PBXGroup;
 			children = (
+				AA0000000000000000000113 /* PlanSheets.swift */,
 				AA0000000000000000000102 /* PlanView.swift */,
 			);
 			path = Plan;
@@ -217,6 +234,31 @@
 				AA000000000000000000010A /* CarEntryView.swift */,
 			);
 			path = Vehicle;
+			sourceTree = "<group>";
+		};
+		AA000000000000000000010E /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				AA000000000000000000010F /* BreakdownSheet.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000115 /* Money */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000116 /* MoneyView.swift */,
+			);
+			path = Money;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000118 /* Ask */ = {
+			isa = PBXGroup;
+			children = (
+				AA000000000000000000011B /* AskModels.swift */,
+				AA0000000000000000000119 /* AskView.swift */,
+			);
+			path = Ask;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -294,6 +336,12 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AA000000000000000000011C /* AskModels.swift in Sources */,
+				AA000000000000000000011A /* AskView.swift in Sources */,
+				AA0000000000000000000117 /* MoneyView.swift in Sources */,
+				AA0000000000000000000114 /* PlanSheets.swift in Sources */,
+				AA0000000000000000000112 /* SummarySheets.swift in Sources */,
+				AA0000000000000000000110 /* BreakdownSheet.swift in Sources */,
 				AA000000000000000000010D /* TransactionDetailView.swift in Sources */,
 				AA000000000000000000010B /* CarEntryView.swift in Sources */,
 				AA0000000000000000000108 /* OnboardingFlow.swift in Sources */,
@@ -426,6 +474,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Folio;
 				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -454,6 +503,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Folio;
 				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;

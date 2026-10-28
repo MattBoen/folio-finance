@@ -1,23 +1,31 @@
 import SwiftUI
 
 struct MainTabView: View {
+    @StateObject private var router = TabRouter()
+
     var body: some View {
-        TabView {
+        TabView(selection: $router.selected) {
             OverviewView()
                 .tabItem { Label("Overview", systemImage: "square.grid.2x2.fill") }
+                .tag(AppTab.overview)
 
             SpendingView()
                 .tabItem { Label("Spending", systemImage: "chart.pie.fill") }
+                .tag(AppTab.spending)
 
             PlanView()
                 .tabItem { Label("Budget", systemImage: "dollarsign.circle.fill") }
+                .tag(AppTab.budget)
 
-            TransactionsView()
-                .tabItem { Label("Activity", systemImage: "list.bullet.rectangle.fill") }
+            MoneyView()
+                .tabItem { Label("Money", systemImage: "creditcard.fill") }
+                .tag(AppTab.money)
 
-            AccountsView()
-                .tabItem { Label("Accounts", systemImage: "building.columns.fill") }
+            AskView()
+                .tabItem { Label("Ask Folio", systemImage: "text.bubble.fill") }
+                .tag(AppTab.ask)
         }
+        .environmentObject(router)
     }
 }
 

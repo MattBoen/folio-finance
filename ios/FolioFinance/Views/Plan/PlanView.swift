@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PlanView: View {
     @EnvironmentObject private var auth: AuthManager
+    @AppStorage("ageEntered") private var ageEntered = 0
     @State private var insights: Insights?
     @State private var budgets: [BudgetLine] = []
     @State private var loaded = false
@@ -11,6 +12,7 @@ struct PlanView: View {
     @State private var showBudget = false
     @State private var showAge = false
     @State private var creating = false
+    @State private var sheet: PlanSheetKind?
 
     var body: some View {
         NavigationStack {
@@ -27,10 +29,10 @@ struct PlanView: View {
                                     message: "Connect an account or add a few transactions and Folio will work out your income, your usual spending, and a budget to match."
                                 )
                             }
-                            incomeCard(insights)
-                            budgetCard(insights)
-                            healthCard(insights.health)
-                            investingCard(insights.investing)
+                            incomeCard(insights).flowIn()
+                            budgetCard(insights).flowIn()
+                            healthCard(insights.health).flowIn()
+                            investingCard(insights.investing).flowIn()
                             Text("General information based on your own data, not financial advice.")
                                 .font(.footnote).foregroundStyle(.secondary)
                                 .multilineTextAlignment(.center).padding(.horizontal, 24).padding(.top, 4)
@@ -38,10 +40,13 @@ struct PlanView: View {
                     }
                     .padding(.horizontal, 16).padding(.bottom, 24)
                 }
+                .scrollIndicators(.hidden)
                 .refreshable { await load() }
                 .overlay { if isLoading && !loaded { ProgressView().controlSize(.large) } }
             }
             .navigationTitle("Budget")
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { ProfileMenu() } }
+            .sheet(item: $sheet) { kind in sheetContent(kind) }
             .sheet(isPresented: $showIncome) {
                 IncomeSheet(current: insights?.income.monthly ?? 0, isManual: insights?.income.source == "manual") { Task { await load() } }
             }
@@ -53,41 +58,88 @@ struct PlanView: View {
         .task { await load() }
     }
 
+    // MARK: Sheets
+
+    @ViewBuilder private func sheetContent(_ kind: PlanSheetKind) -> some View {
+        if let insights {
+            switch kind {
+            case .income:
+                IncomeBreakdown(insights: insights) { handOff { showIncome = true } }
+            case .spending:
+                SpendingPatternBreakdown(insights: insights)
+            case .budget:
+                BudgetBreakdown(budgets: budgets) { handOff { showBudget = true } }
+            case .category(let line):
+                CategoryBudgetBreakdown(line: line)
+            case .health(let metric):
+                HealthBreakdown(metric: metric, insights: insights, hasAge: ageEntered > 0)
+            case .investing:
+                InvestingBreakdown(investing: insights.investing, hasAge: ageEntered > 0) { handOff { showAge = true } }
+            }
+        }
+    }
+
+    /// Closes the breakdown, then opens an edit sheet once it has gone.
+    private func handOff(_ open: @escaping () -> Void) {
+        sheet = nil
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { open() }
+    }
+
+    private var chevron: some View {
+        Image(systemName: "chevron.right")
+            .font(.caption.weight(.bold)).foregroundStyle(.tertiary)
+            .allowsHitTesting(false)
+    }
+
     // MARK: Income + outflow
 
     private func incomeCard(_ i: Insights) -> some View {
         Card {
             VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .firstTextBaseline) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Monthly income").font(.subheadline).foregroundStyle(.secondary)
-                        Text(i.income.monthly > 0 ? money(i.income.monthly) : "Not found yet")
-                            .font(.system(size: 32, weight: .bold, design: .rounded)).monospacedDigit().sensitive()
-                    }
-                    Spacer()
-                    Button("Edit") { showIncome = true }.font(.subheadline.weight(.semibold))
-                }
-                Text(incomeCaption(i.income)).font(.footnote).foregroundStyle(.secondary)
+                TileButton { sheet = .income } content: {
+                    VStack(alignment: .leading, spacing: 14) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Monthly income").font(.subheadline).foregroundStyle(.secondary)
+                            Text(i.income.monthly > 0 ? money(i.income.monthly) : "Not found yet")
+                                .font(.system(size: 32, weight: .bold, design: .rounded)).monospacedDigit().sensitive()
+                        }
+                        Text(incomeCaption(i.income)).font(.footnote).foregroundStyle(.secondary)
+                            .multilineTextAlignment(.leading)
 
-                if !i.income.sources.isEmpty {
-                    VStack(spacing: 8) {
-                        ForEach(i.income.sources) { s in
-                            HStack {
-                                Text(s.name).font(.subheadline).lineLimit(1)
-                                Text(s.frequency.capitalized).font(.caption).foregroundStyle(.secondary)
-                                Spacer()
-                                Text(money(s.monthly)).font(.subheadline.weight(.semibold)).monospacedDigit().sensitive()
+                        if !i.income.sources.isEmpty {
+                            VStack(spacing: 8) {
+                                ForEach(i.income.sources) { s in
+                                    HStack {
+                                        Text(s.name).font(.subheadline).lineLimit(1)
+                                        Text(s.frequency.capitalized).font(.caption).foregroundStyle(.secondary)
+                                        Spacer()
+                                        Text(money(s.monthly)).font(.subheadline.weight(.semibold)).monospacedDigit().sensitive()
+                                    }
+                                }
                             }
                         }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .overlay(alignment: .topTrailing) {
+                    HStack(spacing: 10) {
+                        Button("Edit") { showIncome = true }.font(.subheadline.weight(.semibold))
+                        chevron
                     }
                 }
 
                 if i.outflow.monthlyAverage > 0 {
                     Divider()
-                    HStack(alignment: .top) {
-                        stat("Usual spending", money(i.outflow.monthlyAverage), "per month")
-                        stat("Bills & fixed", money(i.outflow.fixed), "recurring")
-                        stat("Flexible", money(i.outflow.variable), "day to day")
+                    TileButton { sheet = .spending } content: {
+                        HStack(alignment: .top) {
+                            stat("Usual spending", money(i.outflow.monthlyAverage), "per month")
+                            stat("Bills & fixed", money(i.outflow.fixed), "recurring")
+                            stat("Flexible", money(i.outflow.variable), "day to day")
+                            chevron.padding(.top, 2)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
                     }
                 }
             }
@@ -118,12 +170,11 @@ struct PlanView: View {
         let spent = budgets.reduce(0) { $0 + $1.spent }
         Card {
             VStack(alignment: .leading, spacing: 14) {
-                HStack {
-                    Text(Date().formatted(.dateTime.month(.wide)) + " budget").font(.headline)
-                    Spacer()
-                    if !budgets.isEmpty { Button("Edit") { showBudget = true }.font(.subheadline.weight(.semibold)) }
-                }
                 if budgets.isEmpty {
+                    HStack {
+                        Text(Date().formatted(.dateTime.month(.wide)) + " budget").font(.headline)
+                        Spacer()
+                    }
                     Text(i.budget.items.isEmpty
                          ? "Once you have a few weeks of activity, Folio drafts a budget from what you actually spend."
                          : "Folio drafted \(money(i.budget.total)) a month from your recent spending. Review it, change anything, and you're set.")
@@ -137,27 +188,46 @@ struct PlanView: View {
                     }
                     Button("Start from scratch") { showBudget = true }.font(.subheadline)
                 } else {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(alignment: .firstTextBaseline) {
-                            Text(money(max(total - spent, 0))).font(.system(size: 28, weight: .bold, design: .rounded)).monospacedDigit().sensitive()
-                            Text(spent > total ? "over budget" : "left of \(money(total))").font(.subheadline).foregroundStyle(.secondary)
+                    TileButton { sheet = .budget } content: {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text(Date().formatted(.dateTime.month(.wide)) + " budget").font(.headline)
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(alignment: .firstTextBaseline) {
+                                    Text(money(max(total - spent, 0))).font(.system(size: 28, weight: .bold, design: .rounded)).monospacedDigit().sensitive()
+                                    Text(spent > total ? "over budget" : "left of \(money(total))").font(.subheadline).foregroundStyle(.secondary)
+                                }
+                                ProgressBar(fraction: total > 0 ? spent / total : 0, color: barColor(spent, total))
+                            }
                         }
-                        ProgressBar(fraction: total > 0 ? spent / total : 0, color: barColor(spent, total))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
                     }
-                    VStack(spacing: 12) {
+                    .overlay(alignment: .topTrailing) {
+                        HStack(spacing: 10) {
+                            Button("Edit") { showBudget = true }.font(.subheadline.weight(.semibold))
+                            chevron
+                        }
+                    }
+
+                    VStack(spacing: 4) {
                         ForEach(budgets) { b in
                             let style = Categories.style(b.category)
-                            HStack(spacing: 12) {
-                                IconBadge(symbol: style.symbol, color: style.color, size: 32)
-                                VStack(alignment: .leading, spacing: 5) {
-                                    HStack {
-                                        Text(b.category).font(.subheadline)
-                                        Spacer()
-                                        Text("\(money(b.spent)) of \(money(b.monthlyAmount))")
-                                            .font(.caption).foregroundStyle(.secondary).monospacedDigit().sensitive()
+                            TileButton { sheet = .category(b) } content: {
+                                HStack(spacing: 12) {
+                                    IconBadge(symbol: style.symbol, color: style.color, size: 32)
+                                    VStack(alignment: .leading, spacing: 5) {
+                                        HStack {
+                                            Text(b.category).font(.subheadline)
+                                            Spacer()
+                                            Text("\(money(b.spent)) of \(money(b.monthlyAmount))")
+                                                .font(.caption).foregroundStyle(.secondary).monospacedDigit().sensitive()
+                                        }
+                                        ProgressBar(fraction: b.monthlyAmount > 0 ? b.spent / b.monthlyAmount : 0, color: barColor(b.spent, b.monthlyAmount))
                                     }
-                                    ProgressBar(fraction: b.monthlyAmount > 0 ? b.spent / b.monthlyAmount : 0, color: barColor(b.spent, b.monthlyAmount))
+                                    chevron
                                 }
+                                .padding(.vertical, 5)
+                                .contentShape(Rectangle())
                             }
                         }
                     }
@@ -178,10 +248,10 @@ struct PlanView: View {
         VStack(spacing: 8) {
             SectionTitle("Money health")
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible())], spacing: 12) {
-                tile("Savings rate", h.savingsRate.map { "\(Int(($0 * 100).rounded()))%" }, "of income kept", status: h.savingsRate.map { $0 >= 0.15 ? .good : $0 >= 0.05 ? .ok : .attention }, hint: "Many people aim for 15% or more")
-                tile("Emergency fund", h.emergencyFundMonths.map { String(format: "%.1f mo", $0) }, "of spending in cash", status: h.emergencyFundMonths.map { $0 >= 3 ? .good : $0 >= 1 ? .ok : .attention }, hint: "3 to 6 months is a common goal")
-                tile("Credit use", h.creditUtilization.map { "\(Int(($0 * 100).rounded()))%" }, "of card limits", status: h.creditUtilization.map { $0 <= 0.10 ? .good : $0 <= 0.30 ? .ok : .attention }, hint: "Under 30% helps your credit score")
-                tile("Debt payments", h.debtPaymentRatio.map { "\(Int(($0 * 100).rounded()))%" }, "of income", status: h.debtPaymentRatio.map { $0 <= 0.20 ? .good : $0 <= 0.36 ? .ok : .attention }, hint: "Lenders like to see under 36%")
+                healthTile(.savings, h.savingsRate.map { "\(Int(($0 * 100).rounded()))%" }, "of income kept", status: h.savingsRate.map { $0 >= 0.15 ? .good : $0 >= 0.05 ? .ok : .attention }, hint: "Many people aim for 15% or more")
+                healthTile(.emergency, h.emergencyFundMonths.map { String(format: "%.1f mo", $0) }, "of spending in cash", status: h.emergencyFundMonths.map { $0 >= 3 ? .good : $0 >= 1 ? .ok : .attention }, hint: "3 to 6 months is a common goal")
+                healthTile(.credit, h.creditUtilization.map { "\(Int(($0 * 100).rounded()))%" }, "of card limits", status: h.creditUtilization.map { $0 <= 0.10 ? .good : $0 <= 0.30 ? .ok : .attention }, hint: "Under 30% helps your credit score")
+                healthTile(.debt, h.debtPaymentRatio.map { "\(Int(($0 * 100).rounded()))%" }, "of income", status: h.debtPaymentRatio.map { $0 <= 0.20 ? .good : $0 <= 0.36 ? .ok : .attention }, hint: "Lenders like to see under 36%")
             }
         }
     }
@@ -191,16 +261,20 @@ struct PlanView: View {
         var label: String { switch self { case .good: "Strong"; case .ok: "Okay"; case .attention: "Needs care" } }
     }
 
-    private func tile(_ title: String, _ value: String?, _ sub: String, status: Status?, hint: String) -> some View {
-        Card(padding: 14) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    Circle().fill(status?.color ?? .gray).frame(width: 8, height: 8)
-                    Text(title).font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
+    private func healthTile(_ metric: HealthMetric, _ value: String?, _ sub: String, status: Status?, hint: String) -> some View {
+        TileButton { sheet = .health(metric) } content: {
+            Card(padding: 14) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Circle().fill(status?.color ?? .gray).frame(width: 8, height: 8)
+                        Text(metric.title).font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
+                        Spacer(minLength: 0)
+                        chevron
+                    }
+                    Text(value ?? "—").font(.title2.bold()).monospacedDigit().sensitive()
+                    Text(value == nil ? "Not enough data yet" : sub).font(.caption).foregroundStyle(.secondary)
+                    Text(hint).font(.caption2).foregroundStyle(.tertiary).lineLimit(2).multilineTextAlignment(.leading)
                 }
-                Text(value ?? "—").font(.title2.bold()).monospacedDigit().sensitive()
-                Text(value == nil ? "Not enough data yet" : sub).font(.caption).foregroundStyle(.secondary)
-                Text(hint).font(.caption2).foregroundStyle(.tertiary).lineLimit(2)
             }
         }
     }
@@ -212,44 +286,54 @@ struct PlanView: View {
             SectionTitle("Investing ideas")
             Card {
                 VStack(alignment: .leading, spacing: 14) {
-                    if !inv.allocation.isEmpty {
-                        HStack(alignment: .firstTextBaseline) {
-                            Text("Where your money sits").font(.subheadline).foregroundStyle(.secondary)
-                            Spacer()
-                        }
-                        GeometryReader { geo in
-                            HStack(spacing: 2) {
-                                ForEach(Array(inv.allocation.enumerated()), id: \.offset) { idx, s in
-                                    RoundedRectangle(cornerRadius: 3).fill(sliceColor(idx))
-                                        .frame(width: max(4, (geo.size.width - CGFloat(inv.allocation.count - 1) * 2) * s.percent / 100))
-                                }
-                            }
-                        }
-                        .frame(height: 12).clipShape(Capsule())
-                        VStack(spacing: 8) {
-                            ForEach(Array(inv.allocation.enumerated()), id: \.offset) { idx, s in
-                                HStack(spacing: 8) {
-                                    Circle().fill(sliceColor(idx)).frame(width: 9, height: 9)
-                                    Text(s.label).font(.subheadline)
+                    TileButton { sheet = .investing } content: {
+                        VStack(alignment: .leading, spacing: 14) {
+                            if !inv.allocation.isEmpty {
+                                HStack(alignment: .firstTextBaseline) {
+                                    Text("Where your money sits").font(.subheadline).foregroundStyle(.secondary)
                                     Spacer()
-                                    Text("\(Int(s.percent.rounded()))%").font(.caption).foregroundStyle(.secondary)
-                                    Text(money(s.amount)).font(.subheadline.weight(.semibold)).monospacedDigit().frame(minWidth: 80, alignment: .trailing).sensitive()
+                                    chevron
+                                }
+                                GeometryReader { geo in
+                                    HStack(spacing: 2) {
+                                        ForEach(Array(inv.allocation.enumerated()), id: \.offset) { idx, s in
+                                            RoundedRectangle(cornerRadius: 3).fill(sliceColor(idx))
+                                                .frame(width: max(4, (geo.size.width - CGFloat(inv.allocation.count - 1) * 2) * s.percent / 100))
+                                        }
+                                    }
+                                }
+                                .frame(height: 12).clipShape(Capsule())
+                                VStack(spacing: 8) {
+                                    ForEach(Array(inv.allocation.enumerated()), id: \.offset) { idx, s in
+                                        HStack(spacing: 8) {
+                                            Circle().fill(sliceColor(idx)).frame(width: 9, height: 9)
+                                            Text(s.label).font(.subheadline)
+                                            Spacer()
+                                            Text("\(Int(s.percent.rounded()))%").font(.caption).foregroundStyle(.secondary)
+                                            Text(money(s.amount)).font(.subheadline.weight(.semibold)).monospacedDigit().frame(minWidth: 80, alignment: .trailing).sensitive()
+                                        }
+                                    }
+                                }
+                            }
+                            ForEach(inv.notes) { n in
+                                HStack(alignment: .top, spacing: 12) {
+                                    IconBadge(symbol: n.tone == "good" ? "checkmark" : n.tone == "attention" ? "exclamationmark" : "lightbulb.fill",
+                                              color: n.tone == "good" ? .green : n.tone == "attention" ? .orange : .blue, size: 30)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(n.title).font(.subheadline.weight(.semibold))
+                                        Text(n.detail).font(.footnote).foregroundStyle(.secondary)
+                                            .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
+                                    }
                                 }
                             }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
                     }
-                    ForEach(inv.notes) { n in
-                        HStack(alignment: .top, spacing: 12) {
-                            IconBadge(symbol: n.tone == "good" ? "checkmark" : n.tone == "attention" ? "exclamationmark" : "lightbulb.fill",
-                                      color: n.tone == "good" ? .green : n.tone == "attention" ? .orange : .blue, size: 30)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(n.title).font(.subheadline.weight(.semibold))
-                                Text(n.detail).font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                            }
-                        }
+                    if ageEntered == 0 {
+                        Button { showAge = true } label: { Label("Add your age for tailored ideas", systemImage: "person.crop.circle.badge.plus") }
+                            .font(.subheadline)
                     }
-                    Button { showAge = true } label: { Label("Add your age for tailored ideas", systemImage: "person.crop.circle.badge.plus") }
-                        .font(.subheadline)
                 }
             }
         }
@@ -391,6 +475,7 @@ struct AgeSheet: View {
         let year = Calendar.current.component(.year, from: Date()) - age
         do {
             let _: AnyDecodable = try await auth.withFreshToken(.setBirthYear(year))
+            UserDefaults.standard.set(age, forKey: "ageEntered")
             onSaved(); dismiss()
         } catch { self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription }
         saving = false

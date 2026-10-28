@@ -14,6 +14,10 @@ struct OverviewView: View {
     @State private var selectedDate: Date?
     @State private var showAddAccount = false
     @State private var detail: Transaction?
+    @State private var summary: Summary?
+    @EnvironmentObject private var router: TabRouter
+
+    enum Summary: String, Identifiable { case netWorth, assets, liabilities; var id: String { rawValue } }
 
     enum Span: String, CaseIterable, Identifiable {
         case month = "1M", threeMonths = "3M", ytd = "YTD", year = "1Y"
@@ -65,7 +69,7 @@ struct OverviewView: View {
                 ScrollView {
                     VStack(spacing: 14) {
                         if let error { ErrorBanner(message: error) { Task { await load() } } }
-                        hero
+                        TileButton { summary = .netWorth } content: { hero }
                         if loaded && visible.isEmpty {
                             EmptyStateCard(
                                 symbol: "plus.circle.fill",
@@ -82,10 +86,16 @@ struct OverviewView: View {
                             thisMonthCard.flowIn()
                             if !budgets.isEmpty { budgetCard.flowIn() }
                             recentCard.flowIn()
-                            CompositionCard(title: "Assets", total: assets, rows: AccountGroup.allCases.filter { !$0.isLiability }.map { ($0, total($0), accounts(in: $0)) }).flowIn()
+                            TileButton { summary = .assets } content: {
+                                CompositionCard(title: "Assets", total: assets, rows: AccountGroup.allCases.filter { !$0.isLiability }.map { ($0, total($0)) })
+                            }.flowIn()
                             if liabilities > 0 {
-                                CompositionCard(title: "Liabilities", total: liabilities, rows: AccountGroup.allCases.filter(\.isLiability).map { ($0, total($0), accounts(in: $0)) }).flowIn()
+                                TileButton { summary = .liabilities } content: {
+                                    CompositionCard(title: "Liabilities", total: liabilities, rows: AccountGroup.allCases.filter(\.isLiability).map { ($0, total($0)) })
+                                }.flowIn()
                             }
+                        } else {
+                            ForEach(0..<2, id: \.self) { _ in Card { Color.clear.frame(height: 150) }.redacted(reason: .placeholder) }
                         }
                     }
                     .padding(.horizontal, 16)
@@ -99,6 +109,13 @@ struct OverviewView: View {
             .navigationTitle("Overview")
             .toolbar { ToolbarItem(placement: .topBarTrailing) { ProfileMenu() } }
             .sheet(isPresented: $showAddAccount) { AddAccountSheet { Task { await load() } } }
+            .sheet(item: $summary) { kind in
+                switch kind {
+                case .netWorth: NetWorthSummarySheet(assets: assets, liabilities: liabilities)
+                case .assets: AssetsSummarySheet(accounts: visible, netWorth: netWorth)
+                case .liabilities: LiabilitiesSummarySheet(accounts: visible, assetsTotal: assets)
+                }
+            }
             .sheet(item: $detail) { t in
                 TransactionDetailView(transaction: t, all: monthTxns) { Task { await load() } }
             }
@@ -219,18 +236,21 @@ struct OverviewView: View {
     private var thisMonthCard: some View {
         let net = earnedThisMonth - spentThisMonth
         let top = max(earnedThisMonth, spentThisMonth, 1)
-        return Card {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack {
-                    Text(Date().formatted(.dateTime.month(.wide))).font(.headline)
-                    Spacer()
-                    Text(net >= 0 ? "\(money(net)) ahead" : "\(money(-net)) over")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(net >= 0 ? Color.up : Color.down)
-                        .sensitive()
+        return TileButton { router.selected = .spending } content: {
+            Card {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack {
+                        Text(Date().formatted(.dateTime.month(.wide))).font(.headline)
+                        Spacer()
+                        Text(net >= 0 ? "\(money(net)) ahead" : "\(money(-net)) over")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(net >= 0 ? Color.up : Color.down)
+                            .sensitive()
+                        Image(systemName: "chevron.right").font(.caption.weight(.bold)).foregroundStyle(.tertiary)
+                    }
+                    monthBar("Income", earnedThisMonth, top, .up)
+                    monthBar("Spent", spentThisMonth, top, Color(hex: 0x5E5CE6))
                 }
-                monthBar("Income", earnedThisMonth, top, .up)
-                monthBar("Spent", spentThisMonth, top, Color(hex: 0x5E5CE6))
             }
         }
     }
@@ -252,23 +272,26 @@ struct OverviewView: View {
         let total = budgets.reduce(0) { $0 + $1.monthlyAmount }
         let spent = budgets.reduce(0) { $0 + $1.spent }
         let tight = budgets.filter { $0.monthlyAmount > 0 }.sorted { $0.spent / $0.monthlyAmount > $1.spent / $1.monthlyAmount }.prefix(3)
-        return Card {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text("Budget").font(.headline)
-                    Spacer()
-                    Text(spent > total ? "\(money(spent - total)) over" : "\(money(total - spent)) left")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(spent > total ? Color.down : .primary)
-                        .sensitive()
-                }
-                ProgressBar(fraction: total > 0 ? spent / total : 0, color: spent > total ? .red : spent / max(total, 1) > 0.85 ? .orange : .green)
-                ForEach(Array(tight)) { b in
-                    HStack {
-                        Text(b.category).font(.subheadline)
+        return TileButton { router.selected = .budget } content: {
+            Card {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Budget").font(.headline)
                         Spacer()
-                        Text("\(money(b.spent)) of \(money(b.monthlyAmount))")
-                            .font(.caption).foregroundStyle(b.spent > b.monthlyAmount ? Color.down : .secondary).monospacedDigit().sensitive()
+                        Text(spent > total ? "\(money(spent - total)) over" : "\(money(total - spent)) left")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(spent > total ? Color.down : .primary)
+                            .sensitive()
+                        Image(systemName: "chevron.right").font(.caption.weight(.bold)).foregroundStyle(.tertiary)
+                    }
+                    ProgressBar(fraction: total > 0 ? spent / total : 0, color: spent > total ? .red : spent / max(total, 1) > 0.85 ? .orange : .green)
+                    ForEach(Array(tight)) { b in
+                        HStack {
+                            Text(b.category).font(.subheadline)
+                            Spacer()
+                            Text("\(money(b.spent)) of \(money(b.monthlyAmount))")
+                                .font(.caption).foregroundStyle(b.spent > b.monthlyAmount ? Color.down : .secondary).monospacedDigit().sensitive()
+                        }
                     }
                 }
             }
@@ -353,36 +376,12 @@ struct PressableCardStyle: ButtonStyle {
     }
 }
 
-// MARK: - Account lines inside an expanded group
-
-struct AccountLines: View {
-    let accounts: [Account]
-    var body: some View {
-        VStack(spacing: 8) {
-            ForEach(accounts) { a in
-                HStack(alignment: .firstTextBaseline) {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(a.name).font(.subheadline).lineLimit(1)
-                        if let inst = a.institutionName { Text(inst).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
-                    }
-                    Spacer(minLength: 8)
-                    Text((a.isLiability ? "−" : "") + money(a.currentBalance, cents: true))
-                        .font(.subheadline).monospacedDigit().sensitive()
-                }
-            }
-        }
-        .padding(.leading, 38)
-        .padding(.top, 2)
-    }
-}
-
-// MARK: - Composition card (stacked bar + legend; tap a group to see its accounts)
+// MARK: - Composition card (stacked bar + legend; the whole card is one tile)
 
 struct CompositionCard: View {
     let title: String
     let total: Double
-    let rows: [(AccountGroup, Double, [Account])]
-    @State private var open: AccountGroup?
+    let rows: [(AccountGroup, Double)]
 
     var body: some View {
         let active = rows.filter { $0.1 > 0 }
@@ -392,51 +391,34 @@ struct CompositionCard: View {
                     Text(title).font(.headline)
                     Spacer()
                     Text(money(total)).font(.title3.bold()).monospacedDigit().sensitive()
+                    Image(systemName: "chevron.right").font(.caption.weight(.bold)).foregroundStyle(.tertiary)
                 }
                 GeometryReader { geo in
                     HStack(spacing: 2) {
-                        ForEach(active, id: \.0.id) { g, v, _ in
+                        ForEach(active, id: \.0.id) { g, v in
                             RoundedRectangle(cornerRadius: 3, style: .continuous)
                                 .fill(g.color)
-                                .opacity(open == nil || open == g ? 1 : 0.3)
                                 .frame(width: max(4, (geo.size.width - CGFloat(active.count - 1) * 2) * v / max(total, 1)))
                         }
                     }
                 }
                 .frame(height: 12)
                 .clipShape(Capsule())
-                .animation(.smooth, value: open)
 
                 VStack(spacing: 12) {
-                    ForEach(active, id: \.0.id) { g, v, accts in
-                        VStack(spacing: 0) {
-                            Button {
-                                withAnimation(.smooth(duration: 0.4)) { open = open == g ? nil : g }
-                            } label: {
-                                HStack(spacing: 10) {
-                                    IconBadge(symbol: g.symbol, color: g.color, size: 28)
-                                    Text(g.rawValue).font(.subheadline)
-                                    Spacer()
-                                    Text("\(Int((v / max(total, 1) * 100).rounded()))%")
-                                        .font(.caption).foregroundStyle(.secondary)
-                                    Text(money(v)).font(.subheadline.weight(.semibold)).monospacedDigit()
-                                        .frame(minWidth: 84, alignment: .trailing)
-                                        .sensitive()
-                                    Image(systemName: "chevron.right").font(.caption2.weight(.bold)).foregroundStyle(.tertiary)
-                                        .rotationEffect(.degrees(open == g ? 90 : 0))
-                                }
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            if open == g {
-                                AccountLines(accounts: accts)
-                                    .transition(.opacity.combined(with: .move(edge: .top)))
-                                    .padding(.bottom, 4)
-                            }
+                    ForEach(active, id: \.0.id) { g, v in
+                        HStack(spacing: 10) {
+                            IconBadge(symbol: g.symbol, color: g.color, size: 28)
+                            Text(g.rawValue).font(.subheadline)
+                            Spacer()
+                            Text("\(Int((v / max(total, 1) * 100).rounded()))%")
+                                .font(.caption).foregroundStyle(.secondary)
+                            Text(money(v)).font(.subheadline.weight(.semibold)).monospacedDigit()
+                                .frame(minWidth: 84, alignment: .trailing)
+                                .sensitive()
                         }
                     }
                 }
-                .sensoryFeedback(.selection, trigger: open)
             }
         }
     }

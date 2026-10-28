@@ -224,3 +224,30 @@ extension Endpoint {
         return .patch("/vehicles/\(accountId)", body: Body(miles: miles, value: value))
     }
 }
+
+// ── Ask ───────────────────────────────────────────────────────────────────────
+
+extension Endpoint {
+    static var askSettings: Endpoint { .get("/settings/ask") }
+
+    static func setAskEnabled(_ enabled: Bool) -> Endpoint {
+        struct Body: Encodable { let enabled: Bool }
+        return .put("/settings/ask", body: Body(enabled: enabled))
+    }
+
+    static func ask(messages: [(role: String, content: String)]) -> Endpoint {
+        struct Msg: Encodable { let role: String; let content: String }
+        struct Body: Encodable { let messages: [Msg] }
+        return .post("/ask", body: Body(messages: messages.map { Msg(role: $0.role, content: $0.content) }))
+    }
+
+    static func confirmProposal(id: String) -> Endpoint {
+        struct Body: Encodable { let proposalId: String }
+        return .post("/ask/confirm", body: Body(proposalId: id))
+    }
+
+    static func dismissProposal(id: String) -> Endpoint {
+        struct Body: Encodable { let proposalId: String }
+        return .post("/ask/dismiss", body: Body(proposalId: id))
+    }
+}

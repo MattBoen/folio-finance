@@ -28,6 +28,12 @@ services:
         sync: false
       - key: APPLE_BUNDLE_ID
         value: com.mattboen.foliofinance
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ASK_DAILY_LIMIT
+        value: "30"
+      - key: ASK_MODEL
+        value: claude-sonnet-5-5
       - key: ALLOWED_ORIGINS
         value: "*"
 

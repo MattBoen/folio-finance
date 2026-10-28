@@ -10,6 +10,7 @@ import {
   jsonb,
   index,
   uniqueIndex,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
@@ -158,8 +159,36 @@ export const userSettings = pgTable("user_settings", {
   userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
   incomeOverride: numeric("income_override", { precision: 18, scale: 2 }),
   birthYear: integer("birth_year"),
+  askEnabled: boolean("ask_enabled").notNull().default(false),
+  askConsentedAt: timestamp("ask_consented_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ─── Ask Folio (assistant): per-day usage counts and pending changes, never message text ───
+
+export const askUsage = pgTable(
+  "ask_usage",
+  {
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    day: date("day").notNull(),
+    count: integer("count").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.day] })]
+);
+
+export const askProposals = pgTable(
+  "ask_proposals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    payload: jsonb("payload").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    appliedAt: timestamp("applied_at", { withTimezone: true }),
+    dismissedAt: timestamp("dismissed_at", { withTimezone: true }),
+  },
+  (t) => [index("ask_proposals_user_idx").on(t.userId)]
+);
 
 // ─── Vehicles (manual asset with VIN + mileage) ───────────────────────────────
 

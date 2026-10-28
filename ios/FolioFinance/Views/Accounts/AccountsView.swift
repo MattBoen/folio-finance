@@ -1,6 +1,9 @@
 import SwiftUI
 
 struct AccountsView: View {
+    /// True when hosted inside the Money tab, which supplies the navigation stack and title.
+    var embedded = false
+
     @EnvironmentObject private var auth: AuthManager
     @State private var accounts: [Account] = []
     @State private var isLoading = false
@@ -11,16 +14,23 @@ struct AccountsView: View {
     @State private var showCar = false
     @State private var editing: Account?
     @State private var deleting: Account?
+    @State private var summaryGroup: AccountGroup?
 
     private var visible: [Account] { accounts.filter { !$0.isHidden } }
     private var hidden: [Account] { accounts.filter(\.isHidden) }
 
     var body: some View {
-        NavigationStack {
+        Group {
+            if embedded { core } else { NavigationStack { core } }
+        }
+        .task { await load() }
+    }
+
+    private var core: some View {
             ZStack {
                 Wash(tone: .accounts)
                 ScrollView {
-                    VStack(spacing: 14) {
+                    LazyVStack(spacing: 14) {
                         if let error { ErrorBanner(message: error) { Task { await load() } } }
 
                         if loaded && accounts.isEmpty {
@@ -39,7 +49,7 @@ struct AccountsView: View {
                         ForEach(AccountGroup.allCases) { g in
                             let rows = visible.filter { $0.group == g }
                             if !rows.isEmpty {
-                                AccountGroupCard(group: g, accounts: rows, actions: actions)
+                                AccountGroupCard(group: g, accounts: rows, actions: actions, groupTotal: groupTotal(g)) { summaryGroup = g }
                                     .flowIn()
                             }
                         }
@@ -62,10 +72,11 @@ struct AccountsView: View {
                     .padding(.horizontal, 16)
                     .padding(.bottom, 24)
                 }
+                .scrollIndicators(.hidden)
                 .refreshable { await load() }
                 .overlay { if isLoading && !loaded { ProgressView().controlSize(.large) } }
             }
-            .navigationTitle("Accounts")
+            .titledUnlessEmbedded("Accounts", embedded: embedded)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
@@ -81,6 +92,7 @@ struct AccountsView: View {
             .sheet(isPresented: $showConnect) { PlaidLinkSheet() }
             .sheet(isPresented: $showCar, onDismiss: { Task { await load() } }) { AddCarSheet { Task { await load() } } }
             .sheet(item: $editing) { a in EditAccountSheet(account: a) { Task { await load() } } }
+            .sheet(item: $summaryGroup) { g in groupSheet(g) }
             .confirmationDialog(
                 "Delete \(deleting?.name ?? "account")?",
                 isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
@@ -93,8 +105,27 @@ struct AccountsView: View {
                 Text("It will be removed from your net worth.")
             }
             .navigationDestination(for: Account.self) { AccountTransactionsView(account: $0) }
-        }
-        .task { await load() }
+    }
+
+    private func groupTotal(_ g: AccountGroup) -> Double {
+        visible.filter { $0.group == g }.reduce(0) { $0 + NSDecimalNumber(decimal: $1.currentBalance).doubleValue }
+    }
+
+    private func groupSheet(_ g: AccountGroup) -> some View {
+        let rows = visible.filter { $0.group == g }.sorted { $0.currentBalance > $1.currentBalance }
+        let total = max(groupTotal(g), 1)
+        let sameSide = AccountGroup.allCases.filter { $0.isLiability == g.isLiability }.reduce(0.0) { $0 + groupTotal($1) }
+        return BreakdownSheet(
+            title: g.rawValue, headline: (g.isLiability ? "−" : "") + money(groupTotal(g)),
+            caption: "\(rows.count) account\(rows.count == 1 ? "" : "s") · \(Int((groupTotal(g) / max(sameSide, 1) * 100).rounded()))% of your \(g.isLiability ? "liabilities" : "assets")",
+            tone: .accounts,
+            sections: [BreakdownSection(title: "Accounts", rows: rows.map { a in
+                let v = NSDecimalNumber(decimal: a.currentBalance).doubleValue
+                return BreakdownRow(symbol: g.symbol, color: g.color, title: a.name,
+                                    subtitle: [a.institutionName, a.mask.map { "•••• \($0)" }].compactMap { $0 }.joined(separator: " · ").nilIfEmpty ?? a.typeLabel,
+                                    value: (g.isLiability ? "−" : "") + money(a.currentBalance, cents: true), fraction: v / total)
+            })]
+        )
     }
 
     private var actions: AccountActions {
@@ -166,25 +197,31 @@ struct AccountGroupCard: View {
     let group: AccountGroup
     let accounts: [Account]
     let actions: AccountActions
+    var groupTotal: Double = 0
+    var onSummary: () -> Void = {}
 
     private var subtotal: Decimal { accounts.reduce(0) { $0 + $1.currentBalance } }
 
     var body: some View {
         Card(padding: 0) {
             VStack(spacing: 0) {
-                HStack {
-                    Circle().fill(group.color).frame(width: 9, height: 9)
-                    Text(group.rawValue).font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
-                    Spacer()
-                    Text((group.isLiability ? "−" : "") + money(subtotal))
-                        .font(.footnote.weight(.semibold)).foregroundStyle(.secondary).monospacedDigit().sensitive()
+                TileButton(action: onSummary) {
+                    HStack(spacing: 8) {
+                        Circle().fill(group.color).frame(width: 9, height: 9)
+                        Text(group.rawValue).font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
+                        Spacer()
+                        Text((group.isLiability ? "−" : "") + money(subtotal))
+                            .font(.footnote.weight(.semibold)).foregroundStyle(.secondary).monospacedDigit().sensitive()
+                        Image(systemName: "chevron.right").font(.caption2.weight(.bold)).foregroundStyle(.tertiary)
+                    }
+                    .padding(.horizontal, 16).padding(.vertical, 12)
+                    .contentShape(Rectangle())
                 }
-                .padding(.horizontal, 16).padding(.vertical, 12)
 
                 ForEach(accounts) { a in
                     Divider().padding(.leading, 62)
                     NavigationLink(value: a) { AccountRow(account: a) }
-                        .buttonStyle(.plain)
+                        .buttonStyle(PressableRowStyle())
                         .contextMenu {
                             if a.isManual { Button { actions.edit(a) } label: { Label("Edit balance", systemImage: "pencil") } }
                             Button { actions.toggleHidden(a) } label: { Label("Hide", systemImage: "eye.slash") }
