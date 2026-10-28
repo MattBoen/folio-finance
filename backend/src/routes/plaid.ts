@@ -55,18 +55,31 @@ const router = new Hono();
 // ── Create link token ────────────────────────────────────────────────────────
 router.post("/link/token", requireAuth, async (c) => {
   const { userId } = c.get("auth");
-  const { data } = await plaid.linkTokenCreate({
+  const request = {
     user: { client_user_id: userId },
     client_name: "Folio",
     products: [Products.Transactions],
-    // Best-effort extras: institutions that lack them still appear in Link.
-    optional_products: [Products.Investments, Products.Liabilities],
     country_codes: [CountryCode.Us],
     language: "en",
     ...(process.env.PLAID_WEBHOOK_URL ? { webhook: process.env.PLAID_WEBHOOK_URL } : {}),
     ...(process.env.PLAID_REDIRECT_URI ? { redirect_uri: process.env.PLAID_REDIRECT_URI } : {}),
-  });
-  return c.json({ link_token: data.link_token, expiration: data.expiration });
+  };
+  try {
+    // Best-effort extras: institutions that lack them still appear in Link.
+    const { data } = await plaid.linkTokenCreate({
+      ...request,
+      optional_products: [Products.Investments, Products.Liabilities],
+    });
+    return c.json({ link_token: data.link_token, expiration: data.expiration });
+  } catch (err) {
+    // Plaid rejects the whole request when an optional product isn't enabled on the account.
+    // Fall back to transactions only so banks can still be linked.
+    const body = (err as { response?: { data?: { error_message?: string } } })?.response?.data;
+    if (!/not enabled for/i.test(body?.error_message ?? "")) throw err;
+    console.warn("[plaid] optional products not enabled, linking with transactions only:", body?.error_message);
+    const { data } = await plaid.linkTokenCreate(request);
+    return c.json({ link_token: data.link_token, expiration: data.expiration });
+  }
 });
 
 // ── Exchange public token ─────────────────────────────────────────────────────
