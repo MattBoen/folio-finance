@@ -14,25 +14,24 @@ struct SpendingHostView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                switch segment {
-                case .spending: SpendingView(embedded: true)
-                case .budget: PlanView(embedded: true)
-                }
+            ZStack {
+                SpendingView(embedded: true, active: segment == .spending)
+                    .opacity(segment == .spending ? 1 : 0)
+                    .allowsHitTesting(segment == .spending)
+                PlanView(embedded: true)
+                    .opacity(segment == .budget ? 1 : 0)
+                    .allowsHitTesting(segment == .budget)
             }
-            .id(segment)
-            .transition(.opacity)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Picker("Show", selection: Binding(get: { segment }, set: { v in withAnimation(.smooth(duration: 0.3)) { segmentRaw = v.rawValue } })) {
-                        ForEach(Segment.allCases) { Text($0.rawValue).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 230)
+            .animation(.smooth(duration: 0.25), value: segment)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                Picker("Show", selection: Binding(get: { segment }, set: { segmentRaw = $0.rawValue })) {
+                    ForEach(Segment.allCases) { Text($0.rawValue).tag($0) }
                 }
-                ToolbarItem(placement: .topBarTrailing) { ProfileMenu() }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 16).padding(.vertical, 8)
             }
-            .navigationTitle("Spending")
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { ProfileMenu() } }
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .sensoryFeedback(.selection, trigger: segmentRaw)
         }

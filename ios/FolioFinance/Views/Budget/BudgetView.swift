@@ -3,6 +3,8 @@ import Charts
 
 struct SpendingView: View {
     var embedded = false
+    /// False while a host keeps this screen alive but hidden, so its toolbar button steps aside.
+    var active = true
     @EnvironmentObject private var auth: AuthManager
     @State private var month = SpendingView.startOfMonth(Date())
     @State private var transactions: [Transaction] = []
@@ -92,8 +94,10 @@ struct SpendingView: View {
             }
             .titledUnlessEmbedded("Spending", embedded: embedded)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { showAdd = true } label: { Image(systemName: "plus") }
+                if active {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button { showAdd = true } label: { Image(systemName: "plus") }
+                    }
                 }
                 if !embedded { ToolbarItem(placement: .topBarTrailing) { ProfileMenu() } }
             }
