@@ -386,6 +386,8 @@ struct AddAccountSheet: View {
     @State private var balanceText = ""
     @State private var saving = false
     @State private var error: String?
+    @State private var showPlaid = false
+    @State private var linkedViaPlaid = false
 
     private var balance: Double? { Double(balanceText.replacingOccurrences(of: ",", with: "")) }
     private var canSave: Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty && (balance ?? -1) >= 0 && !saving }
@@ -393,6 +395,24 @@ struct AddAccountSheet: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    Button { showPlaid = true } label: {
+                        HStack(spacing: 12) {
+                            IconBadge(symbol: "link", color: .blue, size: 38)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Connect a bank, card or brokerage").font(.headline).foregroundStyle(.primary)
+                                Text("Secure and read-only, through Plaid. Balances and activity update on their own.")
+                                    .font(.footnote).foregroundStyle(.secondary)
+                            }
+                            Spacer(minLength: 4)
+                            Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                    .buttonStyle(.plain)
+                } footer: {
+                    Text("Or enter an account by hand below.")
+                }
                 Section {
                     Picker("Type", selection: $kind) {
                         ForEach(Kind.allCases) { Text($0.rawValue).tag($0) }
@@ -408,7 +428,7 @@ struct AddAccountSheet: View {
                 } header: {
                     Text(kind.isLiability ? "Amount owed" : "Current balance")
                 } footer: {
-                    Text("You can update this any time. Connected banks will sync automatically in a future update.")
+                    Text("Accounts you enter by hand keep the balance you give them. Connect a bank above to have it update on its own.")
                 }
                 if let error { Section { Text(error).foregroundStyle(.red).font(.footnote) } }
             }
@@ -425,6 +445,9 @@ struct AddAccountSheet: View {
             }
         }
         .presentationDetents([.large])
+        .sheet(isPresented: $showPlaid, onDismiss: { if linkedViaPlaid { dismiss() } }) {
+            PlaidLinkSheet(onLinked: { _ in linkedViaPlaid = true; onSaved() })
+        }
     }
 
     private func save() async {

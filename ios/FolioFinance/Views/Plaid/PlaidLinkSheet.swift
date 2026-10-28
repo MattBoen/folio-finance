@@ -8,9 +8,35 @@ import LinkKit
 // Note: LinkKit also exports types named `Account`, `Environment`, `Institution`, and its own
 // `PlaidLinkSheet`. This file avoids the first two; the app's PlaidLinkSheet below shadows LinkKit's.
 
+/// One account the server imported from the bank, shown back to the user after linking.
+struct ImportedAccount: Decodable, Identifiable, Equatable, Sendable {
+    let id: String
+    let name: String
+    let type: String
+    let subtype: String?
+    let mask: String?
+    let balanceCurrent: String?
+
+    var group: AccountGroup {
+        switch type {
+        case "credit": return .credit
+        case "loan": return .loans
+        case "investment": return .investments
+        case "depository":
+            let s = (subtype ?? "").lowercased()
+            return (s.contains("sav") || s == "cd" || s.contains("money market")) ? .savings : .cash
+        default: return .other
+        }
+    }
+
+    var balance: Double { Double(balanceCurrent ?? "") ?? 0 }
+}
+
 private struct PlaidExchangeResult: Decodable, Sendable {
     let id: String
     let institutionName: String?
+    let synced: Bool?
+    let accounts: [ImportedAccount]?
 }
 
 @MainActor
@@ -21,7 +47,7 @@ final class PlaidLinker: ObservableObject {
         case preparing
         case readyToPresent(token: String)
         case saving(institution: String?)
-        case done(institution: String?)
+        case done(institution: String?, accounts: [ImportedAccount], synced: Bool)
         case failed(String)
     }
 
@@ -49,7 +75,7 @@ final class PlaidLinker: ObservableObject {
             let r: PlaidExchangeResult = try await auth.withFreshToken(
                 .exchangeToken(publicToken: publicToken, institutionId: institutionId, institutionName: institutionName)
             )
-            phase = .done(institution: r.institutionName ?? institutionName)
+            phase = .done(institution: r.institutionName ?? institutionName, accounts: r.accounts ?? [], synced: r.synced ?? true)
         } catch {
             phase = .failed(Self.message(error))
         }
@@ -96,7 +122,7 @@ struct PlaidLinkSheet: View {
         .task { await linker.prepare(auth: auth) }
         .onChange(of: linker.phase) { _, new in
             if case .readyToPresent(let t) = new { session = LinkSession(token: t) }
-            if case .done(let name) = new { onLinked(name) }
+            if case .done(let name, _, _) = new { onLinked(name) }
         }
         .fullScreenCover(item: $session) { current in
             PlaidLinkView(token: current.token) { success in
@@ -139,13 +165,8 @@ struct PlaidLinkSheet: View {
             progress("Getting a secure connection…", detail: nil)
         case .saving(let name):
             progress("Connecting \(name ?? "your bank")…", detail: "Importing your accounts and recent activity. This can take up to a minute.")
-        case .done(let name):
-            VStack(spacing: 18) {
-                Image(systemName: "checkmark.circle.fill").font(.system(size: 64)).foregroundStyle(Color.up)
-                Text("\(name ?? "Your bank") is connected").font(.title2.bold()).multilineTextAlignment(.center)
-                Text("Your balances and activity are on their way in.").font(.subheadline).foregroundStyle(.secondary)
-                Button("Done") { dismiss() }.buttonStyle(.borderedProminent).controlSize(.large)
-            }
+        case .done(let name, let imported, let synced):
+            doneView(name: name, accounts: imported, synced: synced)
         case .demo:
             VStack(spacing: 16) {
                 BrandMark(size: 72)
@@ -162,6 +183,49 @@ struct PlaidLinkSheet: View {
                 Button("Try again") { Task { await linker.prepare(auth: auth) } }
                     .buttonStyle(.borderedProminent).controlSize(.large)
             }
+        }
+    }
+
+    /// What was added, listed account by account.
+    private func doneView(name: String?, accounts: [ImportedAccount], synced: Bool) -> some View {
+        VStack(spacing: 16) {
+            Image(systemName: "checkmark.circle.fill").font(.system(size: 54)).foregroundStyle(Color.up)
+                .symbolEffect(.bounce, value: accounts.count)
+            Text("\(name ?? "Your bank") is connected").font(.title2.bold()).multilineTextAlignment(.center)
+            if accounts.isEmpty {
+                Text(synced
+                     ? "No accounts came through from this bank. Try connecting again and make sure to select the accounts to share."
+                     : "Your accounts are still importing. Pull down to refresh in a moment.")
+                    .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
+            } else {
+                Text("Added \(accounts.count) account\(accounts.count == 1 ? "" : "s")")
+                    .font(.subheadline).foregroundStyle(.secondary)
+                ScrollView {
+                    Card(padding: 0) {
+                        VStack(spacing: 0) {
+                            ForEach(Array(accounts.enumerated()), id: \.element.id) { i, a in
+                                HStack(spacing: 12) {
+                                    IconBadge(symbol: a.group.symbol, color: a.group.color, size: 36)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(a.name).font(.body).lineLimit(1)
+                                        Text([a.group.rawValue, a.mask.map { "•••• \($0)" }].compactMap { $0 }.joined(separator: " · "))
+                                            .font(.caption).foregroundStyle(.secondary)
+                                    }
+                                    Spacer(minLength: 8)
+                                    Text((a.group.isLiability ? "−" : "") + money(abs(a.balance), cents: true))
+                                        .font(.body.weight(.semibold)).monospacedDigit().sensitive()
+                                }
+                                .padding(.horizontal, 16).padding(.vertical, 10)
+                                .entrance(i)
+                                if i < accounts.count - 1 { Divider().padding(.leading, 64) }
+                            }
+                        }
+                    }
+                }
+                .frame(maxHeight: 320)
+                .scrollIndicators(.hidden)
+            }
+            Button("Done") { dismiss() }.buttonStyle(.borderedProminent).controlSize(.large)
         }
     }
 

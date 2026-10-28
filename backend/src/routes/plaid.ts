@@ -1,11 +1,11 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { eq, and } from "drizzle-orm";
+import { eq, and, isNull } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import { decodeProtectedHeader, importJWK, jwtVerify } from "jose";
 import { db } from "../db/client.js";
-import { plaidItems } from "../db/schema.js";
+import { plaidItems, accounts } from "../db/schema.js";
 import { requireAuth } from "../middleware/auth.js";
 import { plaid } from "../services/plaid-client.js";
 import { encryptToken } from "../services/encryption.js";
@@ -133,12 +133,26 @@ router.post(
       if (boss) await boss.send("plaid-sync", { itemId: item.id, userId });
     }
 
+    // Tell the app exactly what was imported so it can show the user.
+    const imported = await db
+      .select({
+        id: accounts.id,
+        name: accounts.name,
+        type: accounts.type,
+        subtype: accounts.subtype,
+        mask: accounts.mask,
+        balanceCurrent: accounts.balanceCurrent,
+      })
+      .from(accounts)
+      .where(and(eq(accounts.plaidItemId, item.id), isNull(accounts.deletedAt)));
+
     return c.json({
       id: item.id,
       institution_name: item.institutionName,
       status: item.status,
       created_at: item.createdAt,
       synced,
+      accounts: imported,
     });
   }
 );

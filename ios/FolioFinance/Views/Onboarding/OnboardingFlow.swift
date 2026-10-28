@@ -10,6 +10,7 @@ struct OnboardingFlow: View {
     @State private var accounts: [Account] = []
     @State private var showLink = false
     @State private var showManual = false
+    @State private var autoOpenedLink = false
 
     var body: some View {
         ZStack {
@@ -47,7 +48,17 @@ struct OnboardingFlow: View {
         .padding(.horizontal, 24).padding(.top, 16).padding(.bottom, 8)
     }
 
-    private func go(_ s: Step) { withAnimation(Motion.spring) { step = s } }
+    /// Setup connects through Plaid by default: arriving at the connect step with no accounts opens it straight away.
+    private func go(_ s: Step) {
+        withAnimation(Motion.spring) { step = s }
+        if s == .connect, accounts.isEmpty, !autoOpenedLink, !auth.isDemo {
+            autoOpenedLink = true
+            Task {
+                try? await Task.sleep(for: .milliseconds(450))
+                if step == .connect { showLink = true }
+            }
+        }
+    }
 
     private func loadAccounts() async {
         if let r: AccountsResponse = try? await auth.withFreshToken(.accounts) { accounts = r.accounts }
