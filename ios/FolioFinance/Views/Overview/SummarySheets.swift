@@ -22,7 +22,7 @@ private struct TypeDropdownCard: View {
                         let isOpen = open.contains(g)
                         VStack(spacing: 0) {
                             Button {
-                                withAnimation(.smooth(duration: 0.4)) {
+                                withAnimation(Motion.spring) {
                                     if isOpen { open.remove(g) } else { open.insert(g) }
                                 }
                             } label: {

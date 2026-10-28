@@ -35,9 +35,9 @@ struct PlanView: View {
                                     message: "Connect an account or add a few transactions and Folio will work out your income, your usual spending, and a budget to match."
                                 )
                             }
-                            incomeCard(insights).flowIn()
-                            budgetCard(insights).flowIn()
-                            healthCard(insights.health).flowIn()
+                            incomeCard(insights).flowIn(0)
+                            budgetCard(insights).flowIn(1)
+                            healthCard(insights.health).flowIn(2)
                             Text("General information based on your own data, not financial advice.")
                                 .font(.footnote).foregroundStyle(.secondary)
                                 .multilineTextAlignment(.center).padding(.horizontal, 24).padding(.top, 4)
@@ -302,7 +302,7 @@ struct PlanView: View {
         creating = true
         do {
             let r: BudgetsResponse = try await auth.withFreshToken(.generateBudget)
-            withAnimation(.smooth) { budgets = r.budgets }
+            withAnimation(Motion.spring) { budgets = r.budgets }
             UINotificationFeedbackGenerator().notificationOccurred(.success)
         } catch {
             self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
@@ -314,14 +314,23 @@ struct PlanView: View {
 struct ProgressBar: View {
     var fraction: Double
     var color: Color
+    @State private var grown = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
+        let f = grown ? min(max(fraction, 0), 1) : 0
         GeometryReader { geo in
             Capsule().fill(color.opacity(0.18))
                 .overlay(alignment: .leading) {
-                    Capsule().fill(color).frame(width: max(6, geo.size.width * min(max(fraction, 0), 1)))
+                    Capsule().fill(color).frame(width: max(6, geo.size.width * f))
                 }
         }
         .frame(height: 7)
+        .animation(Motion.spring, value: fraction)
+        .onAppear {
+            // Bars fill in from empty the first time they're seen.
+            if reduceMotion { grown = true } else { withAnimation(Motion.reveal.delay(0.12)) { grown = true } }
+        }
     }
 }
 

@@ -26,6 +26,7 @@ struct MainTabView: View {
                 .tag(AppTab.ask)
         }
         .environmentObject(router)
+        .sensoryFeedback(.selection, trigger: router.selected)
     }
 }
 

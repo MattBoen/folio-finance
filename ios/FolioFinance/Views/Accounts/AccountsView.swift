@@ -48,11 +48,11 @@ struct AccountsView: View {
                             .buttonStyle(.borderedProminent).controlSize(.large)
                         }
 
-                        ForEach(AccountGroup.allCases) { g in
+                        ForEach(Array(AccountGroup.allCases.enumerated()), id: \.element) { i, g in
                             let rows = visible.filter { $0.group == g }
                             if !rows.isEmpty {
                                 AccountGroupCard(group: g, accounts: rows, actions: actions, groupTotal: groupTotal(g)) { summaryGroup = g }
-                                    .flowIn()
+                                    .flowIn(i)
                             }
                         }
 

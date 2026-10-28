@@ -115,12 +115,12 @@ struct InvestingView: View {
                         if loaded && invested.isEmpty {
                             emptyState
                         } else if !invested.isEmpty {
-                            heroCard.flowIn()
-                            chartCard.flowIn()
-                            if let inv = insights?.investing, !inv.allocation.isEmpty { allocationCard(inv).flowIn() }
-                            accountsCard.flowIn()
+                            heroCard.flowIn(0)
+                            chartCard.flowIn(1)
+                            if let inv = insights?.investing, !inv.allocation.isEmpty { allocationCard(inv).flowIn(2) }
+                            accountsCard.flowIn(3)
                         }
-                        if loaded { ideasSection.flowIn() }
+                        if loaded { ideasSection.flowIn(4) }
                         if loaded {
                             Text("General information, not financial advice.")
                                 .font(.footnote).foregroundStyle(.secondary)
@@ -161,7 +161,7 @@ struct InvestingView: View {
             }
             .sorted { $0.0 < $1.0 }
             .enumerated().map { Pt(id: $0.offset, date: $0.element.0, value: $0.element.1) }
-        withAnimation(.smooth) { points = pts }
+        withAnimation(Motion.spring) { points = pts }
     }
 
     // MARK: Cards
@@ -227,6 +227,7 @@ struct InvestingView: View {
                         }
                     }
                     .frame(height: 180)
+                    .chartReveal(id: "\(range.rawValue)-\(points.count)")
                     .sensitive()
                 } else {
                     Label("History builds up daily. Check back soon for your trend line.", systemImage: "clock")
@@ -266,7 +267,7 @@ struct InvestingView: View {
                     Spacer()
                     chevron(.white.opacity(0.8))
                 }
-                Text(money(totalInvested))
+                CountUpText(value: totalInvested)
                     .font(.system(size: 44, weight: .bold, design: .rounded))
                     .monospacedDigit().minimumScaleFactor(0.6).lineLimit(1)
                     .contentTransition(.numericText())

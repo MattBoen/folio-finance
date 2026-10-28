@@ -121,24 +121,19 @@ struct Sensitive: ViewModifier {
     func body(content: Content) -> some View {
         content
             .blur(radius: hide ? 9 : 0)
-            .animation(.easeInOut(duration: 0.15), value: hide)
+            .animation(Motion.spring, value: hide)
     }
 }
 
 extension View {
     func sensitive() -> some View { modifier(Sensitive()) }
-
-    func flowIn() -> some View {
-        scrollTransition(.animated(.smooth(duration: 0.4))) { c, phase in
-            c.opacity(phase.isIdentity ? 1 : 0.4).scaleEffect(phase.isIdentity ? 1 : 0.96)
-        }
-    }
 }
 
 struct EmptyStateCard: View {
     var symbol: String
     var title: String
     var message: String
+    @State private var bounced = false
 
     var body: some View {
         Card {
@@ -146,6 +141,8 @@ struct EmptyStateCard: View {
                 Image(systemName: symbol)
                     .font(.system(size: 38, weight: .regular))
                     .foregroundStyle(.tint)
+                    .symbolEffect(.bounce, value: bounced)
+                    .onAppear { bounced = true }
                 Text(title).font(.headline)
                 Text(message)
                     .font(.subheadline)

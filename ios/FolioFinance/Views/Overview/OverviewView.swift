@@ -70,7 +70,7 @@ struct OverviewView: View {
                 ScrollView {
                     VStack(spacing: 14) {
                         if let error { ErrorBanner(message: error) { Task { await load() } } }
-                        TileButton { summary = .netWorth } content: { hero }
+                        TileButton { summary = .netWorth } content: { hero }.flowIn(0)
                         if loaded && visible.isEmpty {
                             EmptyStateCard(
                                 symbol: "plus.circle.fill",
@@ -83,20 +83,20 @@ struct OverviewView: View {
                             }
                             .buttonStyle(.borderedProminent).controlSize(.large)
                         } else if !visible.isEmpty {
-                            chartCard.flowIn()
-                            thisMonthCard.flowIn()
-                            if !budgets.isEmpty { budgetCard.flowIn() }
-                            recentCard.flowIn()
+                            chartCard.flowIn(1)
+                            thisMonthCard.flowIn(2)
+                            if !budgets.isEmpty { budgetCard.flowIn(3) }
+                            recentCard.flowIn(4)
                             TileButton { summary = .assets } content: {
                                 CompositionCard(title: "Assets", total: assets, rows: AccountGroup.allCases.filter { !$0.isLiability }.map { ($0, total($0)) })
-                            }.flowIn()
+                            }.flowIn(5)
                             if liabilities > 0 {
                                 TileButton { summary = .liabilities } content: {
                                     CompositionCard(title: "Liabilities", total: liabilities, rows: AccountGroup.allCases.filter(\.isLiability).map { ($0, total($0)) })
-                                }.flowIn()
+                                }.flowIn(6)
                             }
                         } else {
-                            ForEach(0..<2, id: \.self) { _ in Card { Color.clear.frame(height: 150) }.redacted(reason: .placeholder) }
+                            ForEach(0..<2, id: \.self) { _ in Card { Color.clear.frame(height: 150) }.redacted(reason: .placeholder).shimmer() }
                         }
                     }
                     .padding(.horizontal, 16)
@@ -131,12 +131,11 @@ struct OverviewView: View {
         let delta: Double? = points.count >= 2 ? (points.last!.value - points.first!.value) : nil
         return VStack(alignment: .leading, spacing: 6) {
             Text("Net worth").font(.subheadline.weight(.semibold)).opacity(0.85)
-            Text(money(netWorth))
+            CountUpText(value: netWorth)
                 .font(.system(size: 44, weight: .bold, design: .rounded))
                 .monospacedDigit()
                 .minimumScaleFactor(0.6)
                 .lineLimit(1)
-                .contentTransition(.numericText())
                 .sensitive()
             if let delta {
                 Label("\(signedMoney(delta)) \(range.label)", systemImage: delta >= 0 ? "arrow.up.right" : "arrow.down.right")
@@ -222,6 +221,7 @@ struct OverviewView: View {
                         }
                     }
                     .frame(height: 180)
+                    .chartReveal(id: "\(range.rawValue)-\(points.count)")
                     .sensitive()
                 } else {
                     Label("History builds up daily. Check back tomorrow for your trend line.", systemImage: "clock")
@@ -391,8 +391,10 @@ struct OverviewView: View {
 struct PressableCardStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
-            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? 0.965 : 1)
+            .brightness(configuration.isPressed ? -0.025 : 0)
+            // Quick to press, a little spring on release.
+            .animation(configuration.isPressed ? Motion.press : Motion.bouncy, value: configuration.isPressed)
     }
 }
 

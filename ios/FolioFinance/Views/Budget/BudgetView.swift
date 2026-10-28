@@ -6,6 +6,7 @@ struct SpendingView: View {
     /// False while a host keeps this screen alive but hidden, so its toolbar button steps aside.
     var active = true
     @EnvironmentObject private var auth: AuthManager
+    @State private var donutIn = false
     @State private var month = SpendingView.startOfMonth(Date())
     @State private var transactions: [Transaction] = []
     @State private var previousSpent = 0.0
@@ -81,8 +82,8 @@ struct SpendingView: View {
                             }
                             .buttonStyle(.borderedProminent).controlSize(.large)
                         } else if !expenses.isEmpty {
-                            TileButton { sheet = .spent } content: { donutCard }.flowIn()
-                            statsCard.flowIn()
+                            TileButton { sheet = .spent } content: { donutCard }.flowIn(0)
+                            statsCard.flowIn(1)
                             categoriesCard
                         }
                     }
@@ -130,20 +131,30 @@ struct SpendingView: View {
         return Card {
             VStack(spacing: 14) {
                 Chart(list) { s in
-                    SectorMark(angle: .value("Spent", s.value), innerRadius: .ratio(0.66), angularInset: 1.5)
+                    // The chosen slice steps out a little; the rest dim.
+                    SectorMark(angle: .value("Spent", s.value),
+                               innerRadius: .ratio(selected == s.id ? 0.62 : 0.66),
+                               outerRadius: .ratio(selected == s.id ? 1.0 : 0.94),
+                               angularInset: 1.5)
                         .cornerRadius(6)
                         .foregroundStyle(s.color)
                         .opacity(selected == nil || selected == s.id ? 1 : 0.28)
                 }
                 .chartLegend(.hidden)
                 .frame(height: 220)
+                .animation(Motion.bouncy, value: selected)
+                .scaleEffect(donutIn ? 1 : 0.7)
+                .rotationEffect(.degrees(donutIn ? 0 : -110))
+                .opacity(donutIn ? 1 : 0)
+                .onAppear { if active { spinIn() } }
+                // Kept alive behind the Budget side, so spin in again each time it's shown.
+                .onChange(of: active) { _, now in if now { donutIn = false; spinIn() } }
                 .overlay {
                     VStack(spacing: 2) {
                         Text(focus?.id ?? "Spent")
                             .font(.footnote.weight(.medium)).foregroundStyle(.secondary)
-                        Text(money(focus?.value ?? spent))
+                        CountUpText(value: focus?.value ?? spent)
                             .font(.system(size: 30, weight: .bold, design: .rounded)).monospacedDigit()
-                            .contentTransition(.numericText())
                             .sensitive()
                         if let focus {
                             Text("\(Int((focus.value / total * 100).rounded()))% of spending")
@@ -160,6 +171,10 @@ struct SpendingView: View {
                 }
             }
         }
+    }
+
+    private func spinIn() {
+        withAnimation(Motion.bouncy.delay(0.1)) { donutIn = true }
     }
 
     private var statsCard: some View {
@@ -268,7 +283,7 @@ struct SpendingView: View {
     private func categoryRow(_ s: Slice, top: Double) -> some View {
         let open = selected == s.id
         return Button {
-            withAnimation(.smooth(duration: 0.4)) { selected = open ? nil : s.id }
+            withAnimation(Motion.spring) { selected = open ? nil : s.id }
         } label: {
             HStack(spacing: 12) {
                 IconBadge(symbol: s.symbol, color: s.color, size: 36)
@@ -337,7 +352,7 @@ struct SpendingView: View {
             if rows.count > 6 {
                 Divider().padding(.leading, 16)
                 Button {
-                    withAnimation(.smooth(duration: 0.4)) {
+                    withAnimation(Motion.spring) {
                         if expanded { showAllIn.remove(s.id) } else { showAllIn.insert(s.id) }
                     }
                 } label: {

@@ -48,8 +48,9 @@ struct BreakdownSheet<Extra: View>: View {
                                 if let caption { Text(caption).font(.footnote).foregroundStyle(.secondary) }
                             }
                         }
-                        extra()
-                        ForEach(sections) { section in
+                        .entrance(0)
+                        extra().entrance(1)
+                        ForEach(Array(sections.enumerated()), id: \.element.id) { i, section in
                             VStack(spacing: 8) {
                                 if let t = section.title { SectionTitle(t) }
                                 Card(padding: 0) {
@@ -61,6 +62,7 @@ struct BreakdownSheet<Extra: View>: View {
                                     }
                                 }
                             }
+                            .entrance(i + 2)
                         }
                         if let footnote {
                             Text(footnote).font(.footnote).foregroundStyle(.secondary)

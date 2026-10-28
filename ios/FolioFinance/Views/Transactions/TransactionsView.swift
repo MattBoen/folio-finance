@@ -184,7 +184,8 @@ struct PressableRowStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .background(configuration.isPressed ? Color.primary.opacity(0.06) : .clear)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+            .animation(configuration.isPressed ? Motion.press : Motion.bouncy, value: configuration.isPressed)
     }
 }
 

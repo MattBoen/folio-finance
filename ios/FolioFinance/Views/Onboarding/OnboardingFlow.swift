@@ -47,7 +47,7 @@ struct OnboardingFlow: View {
         .padding(.horizontal, 24).padding(.top, 16).padding(.bottom, 8)
     }
 
-    private func go(_ s: Step) { withAnimation(.smooth(duration: 0.4)) { step = s } }
+    private func go(_ s: Step) { withAnimation(Motion.spring) { step = s } }
 
     private func loadAccounts() async {
         if let r: AccountsResponse = try? await auth.withFreshToken(.accounts) { accounts = r.accounts }
