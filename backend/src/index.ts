@@ -14,6 +14,7 @@ import { vehiclesRouter } from "./routes/vehicles.js";
 import { accountRouter } from "./routes/account.js";
 import { legal } from "./routes/legal.js";
 import { askRouter } from "./routes/ask.js";
+import { errorHandler } from "./middleware/error-handler.js";
 
 const app = new Hono();
 
@@ -35,10 +36,7 @@ app.route("/account", accountRouter);
 app.route("/ask", askRouter);
 app.route("/", legal);
 
-app.onError((err, c) => {
-  console.error("[unhandled]", err.message);
-  return c.json({ error: "Internal server error" }, 500);
-});
+app.onError(errorHandler);
 
 // Only bind to a port when run directly, not when imported by tests
 if (process.env.NODE_ENV !== "test") {
