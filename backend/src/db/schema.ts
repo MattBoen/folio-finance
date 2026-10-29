@@ -60,6 +60,8 @@ export const plaidItems = pgTable(
     transactionCursor: text("transaction_cursor"),
     // Set once the full history has been re-read to pick up purchase locations.
     placesBackfilled: boolean("places_backfilled").notNull().default(false),
+    // Set once the full history has been re-read for the statement text, store numbers and online/in-store tag.
+    detailsBackfilled: boolean("details_backfilled").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -125,8 +127,16 @@ export const transactions = pgTable(
     isExcluded: boolean("is_excluded").notNull().default(false),
     lat: numeric("lat", { precision: 10, scale: 7 }),
     lon: numeric("lon", { precision: 10, scale: 7 }),
-    // Street address the bank reported for the purchase, when it did: "123 Main St, Minot, ND 58701".
+    // Street address of the purchase, when known: "123 Main St, Minot, ND 58701". From the bank, the
+    // statement text, or a merchant lookup. Never just a city (that alone would put the pin in the wrong place).
     place: text("place"),
+    city: text("city"),
+    region: text("region"),
+    // Plaid's "online" / "in store" / "other"; online purchases get no map.
+    paymentChannel: text("payment_channel"),
+    storeNumber: text("store_number"),
+    // The raw statement line, which for many cards ends in the store's street address.
+    originalDescription: text("original_description"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
@@ -136,6 +146,25 @@ export const transactions = pgTable(
     index("transactions_account_idx").on(t.accountId),
     index("transactions_date_idx").on(t.date),
   ]
+);
+
+// ─── Merchant places (looked up once per merchant, per user) ─────────────────
+
+export const merchantPlaces = pgTable(
+  "merchant_places",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    // Lowercased merchant name + store number + city, so one lookup serves every purchase there.
+    key: text("key").notNull(),
+    address: text("address"),
+    city: text("city"),
+    region: text("region"),
+    postal: text("postal"),
+    confidence: text("confidence"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("merchant_places_user_key_idx").on(t.userId, t.key)]
 );
 
 // ─── Budgets ──────────────────────────────────────────────────────────────────

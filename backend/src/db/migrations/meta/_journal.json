@@ -71,6 +71,13 @@
       "when": 1793236045467,
       "tag": "0009_damp_ezekiel",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793237278987,
+      "tag": "0010_sleepy_prowler",
+      "breakpoints": true
     }
   ]
 }

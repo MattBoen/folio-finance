@@ -16,10 +16,14 @@ struct Transaction: Identifiable, Codable, Sendable, Hashable {
     let lat: Double?
     let lon: Double?
     let place: String?
+    let city: String?
+    let region: String?
+    /// "online", "in store" or "other", as the bank reports it.
+    let paymentChannel: String?
 
     private enum CodingKeys: String, CodingKey {
         case id, accountId, accountName, amount, date, name, userName, merchantName
-        case categoryName, note, isPending, isExcluded, lat, lon, place
+        case categoryName, note, isPending, isExcluded, lat, lon, place, city, region, paymentChannel
     }
 
     init(from decoder: Decoder) throws {
@@ -39,6 +43,9 @@ struct Transaction: Identifiable, Codable, Sendable, Hashable {
         lat = Self.flexibleDouble(c, .lat)
         lon = Self.flexibleDouble(c, .lon)
         place = try c.decodeIfPresent(String.self, forKey: .place)
+        city = try c.decodeIfPresent(String.self, forKey: .city)
+        region = try c.decodeIfPresent(String.self, forKey: .region)
+        paymentChannel = try c.decodeIfPresent(String.self, forKey: .paymentChannel)
     }
 
     /// The server sends coordinates as numeric strings (Postgres numeric) or numbers, or null.

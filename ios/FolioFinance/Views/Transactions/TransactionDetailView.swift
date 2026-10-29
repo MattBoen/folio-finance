@@ -41,8 +41,10 @@ private final class DeviceLocation: NSObject, CLLocationManagerDelegate {
     private func finish(_ c: CLLocationCoordinate2D?) { waiting?.resume(returning: c); waiting = nil }
 }
 
-/// Finds where a purchase happened. In order of trust: the pin the bank sent, the street address the bank sent,
-/// then a search for the merchant that only counts when it lands near where this customer actually shops.
+/// Finds where a purchase happened. In order of trust: the pin the bank sent, the street address the server
+/// has (from the bank, the statement line, or a one-time merchant lookup), then an Apple Maps search for the
+/// merchant in the town the bank reported. A search result only counts when its name matches the merchant,
+/// so a different business nearby never gets the pin. Online purchases get no map.
 @MainActor
 final class PlaceLocator {
     static let shared = PlaceLocator()
@@ -58,35 +60,53 @@ final class PlaceLocator {
     private var deviceAnchor: CLLocationCoordinate2D?
     private var triedDevice = false
     private var cache: [String: CLLocationCoordinate2D] = [:]
+    private var towns: [String: CLLocationCoordinate2D?] = [:]
     private var missing = Set<String>()
     private var tail: Task<Void, Never> = Task {}
-    private let nearMeters = 60_000.0
 
-    private static let categoriesWithoutPlace: Set<String> = ["Income", "Subscriptions", "Bills & Utilities", "Transfer", "Home"]
-    private static let onlineMerchants = ["uber", "lyft", "netflix", "spotify", "amazon", "apple", "google", "paypal", "venmo", "doordash", "payroll", "rent", "transfer", "payment", "interest"]
+    private static let categoriesWithoutPlace: Set<String> = ["Income", "Subscriptions", "Bills & Utilities", "Transfer", "Home", "Fees"]
+    private static let onlineMerchants = ["uber", "lyft", "netflix", "spotify", "amazon", "amzn", "apple.com", "itunes", "google", "paypal", "venmo", "doordash", "grubhub", "payroll", "rent", "transfer", "payment", "interest", "hulu", "openai", "steam"]
+    /// Card-processor prefixes and filler that say nothing about the business.
+    private static let noise: Set<String> = ["the", "and", "of", "inc", "llc", "co", "corp", "store", "sq", "tst", "fsp", "pp", "pos", "debit", "purchase", "card", "visa", "checkcard", "dbt", "ach", "www", "com"]
 
     static func canLocate(_ t: Transaction) -> Bool {
+        if t.paymentChannel == "online" { return false }
+        let key = (t.merchantName ?? t.name).lowercased()
+        if onlineMerchants.contains(where: { key.contains($0) }) { return false }
         if t.hasCoordinate || (t.place?.isEmpty == false) { return true }
-        if categoriesWithoutPlace.contains(t.category) { return false }
-        let key = t.merchantKey
-        return !onlineMerchants.contains { key.contains($0) }
+        return !categoriesWithoutPlace.contains(t.category)
+    }
+
+    /// Meaningful words of a business name: "SQ *CHUB'S PUB #12" -> ["chubs", "pub"].
+    static func words(_ name: String) -> [String] {
+        name.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .lowercased()
+            .replacingOccurrences(of: "'", with: "")
+            .replacingOccurrences(of: "\u{2019}", with: "")
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { $0.count > 2 && !noise.contains($0) && $0.rangeOfCharacter(from: .decimalDigits) == nil }
+    }
+
+    /// True when a map result is plausibly this merchant: its name contains the merchant's first real word.
+    static func sameBusiness(merchant: String, result: String) -> Bool {
+        guard let first = words(merchant).first else { return false }
+        return words(result).joined().contains(first)
     }
 
     /// Remembers the middle of the purchases the bank placed, so searches stay in the customer's own area.
     func learn(from transactions: [Transaction]) async {
         let pins = transactions.compactMap { t -> (Double, Double)? in
-            guard let la = t.lat, let lo = t.lon else { return nil }
+            guard t.paymentChannel != "online", let la = t.lat, let lo = t.lon else { return nil }
             return (la, lo)
         }
         var center: CLLocationCoordinate2D?
         if pins.count >= 2 {
             center = CLLocationCoordinate2D(latitude: pins.map(\.0).sorted()[pins.count / 2], longitude: pins.map(\.1).sorted()[pins.count / 2])
         } else if anchor == nil {
-            // No pins from the bank: use the address it reports most often.
-            let counts = transactions.compactMap(\.place).reduce(into: [String: Int]()) { $0[$1, default: 0] += 1 }
-            if let top = counts.max(by: { $0.value < $1.value })?.key {
-                center = try? await CLGeocoder().geocodeAddressString(top).first?.location?.coordinate
-            }
+            // No pins from the bank: use the town it reports most often.
+            let counts = transactions.compactMap { t in t.city.map { [$0, t.region].compactMap { $0 }.joined(separator: ", ") } }
+                .reduce(into: [String: Int]()) { $0[$1, default: 0] += 1 }
+            if let top = counts.max(by: { $0.value < $1.value })?.key { center = await town(top) }
         }
         guard let center else { return }
         anchor = center
@@ -95,42 +115,62 @@ final class PlaceLocator {
     }
 
     func cachedCoordinate(for t: Transaction) -> CLLocationCoordinate2D? {
+        guard Self.canLocate(t) else { return nil }
         if let lat = t.lat, let lon = t.lon { return CLLocationCoordinate2D(latitude: lat, longitude: lon) }
         return cache[t.id]
+    }
+
+    private func town(_ name: String) async -> CLLocationCoordinate2D? {
+        if let known = towns[name] { return known }
+        let found = try? await CLGeocoder().geocodeAddressString(name).first?.location?.coordinate
+        towns[name] = found
+        return found
     }
 
     func coordinate(for t: Transaction) async -> CLLocationCoordinate2D? {
         if let c = cachedCoordinate(for: t) { return c }
         guard Self.canLocate(t), !missing.contains(t.id) else { return nil }
 
-        // The bank gave a street address: ask for exactly that.
+        // A street address: ask for exactly that.
         if let place = t.place, !place.isEmpty,
            let found = try? await CLGeocoder().geocodeAddressString(place).first?.location?.coordinate {
             cache[t.id] = found
             return found
         }
 
-        // Otherwise search by name, but only trust a result close to where this customer shops.
-        if anchor == nil, deviceAnchor == nil, !triedDevice {
-            triedDevice = true
-            deviceAnchor = await device.current()
+        // Otherwise search by name in the town the bank reported, or else where this customer usually shops.
+        var center: CLLocationCoordinate2D?
+        var radius = 25_000.0
+        if let city = t.city {
+            center = await town([city, t.region].compactMap { $0 }.joined(separator: ", "))
         }
-        guard let anchor = anchor ?? deviceAnchor else { missing.insert(t.id); return nil }
+        if center == nil {
+            if anchor == nil, deviceAnchor == nil, !triedDevice {
+                triedDevice = true
+                deviceAnchor = await device.current()
+            }
+            center = anchor ?? deviceAnchor
+            radius = 40_000
+        }
+        guard let center else { missing.insert(t.id); return nil }
+
+        let merchant = t.merchantName ?? t.name
+        let query = Self.words(merchant).joined(separator: " ")
+        guard !query.isEmpty else { missing.insert(t.id); return nil }
         let previous = tail
-        let name = t.displayName
-        let near = nearMeters
         let job = Task<CLLocationCoordinate2D?, Never> {
             await previous.value
             let request = MKLocalSearch.Request()
-            request.naturalLanguageQuery = name
-            request.region = MKCoordinateRegion(center: anchor, latitudinalMeters: near, longitudinalMeters: near)
+            request.naturalLanguageQuery = query
+            request.region = MKCoordinateRegion(center: center, latitudinalMeters: radius * 2, longitudinalMeters: radius * 2)
             request.resultTypes = .pointOfInterest
             let response = try? await MKLocalSearch(request: request).start()
-            let here = CLLocation(latitude: anchor.latitude, longitude: anchor.longitude)
+            let here = CLLocation(latitude: center.latitude, longitude: center.longitude)
             return response?.mapItems
+                .filter { Self.sameBusiness(merchant: merchant, result: $0.name ?? "") }
                 .map { $0.placemark.coordinate }
-                .filter { CLLocation(latitude: $0.latitude, longitude: $0.longitude).distance(from: here) <= near }
-                .first
+                .filter { CLLocation(latitude: $0.latitude, longitude: $0.longitude).distance(from: here) <= radius }
+                .min { CLLocation(latitude: $0.latitude, longitude: $0.longitude).distance(from: here) < CLLocation(latitude: $1.latitude, longitude: $1.longitude).distance(from: here) }
         }
         tail = Task { _ = await job.value; try? await Task.sleep(for: .milliseconds(250)) }
 

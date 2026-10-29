@@ -31,6 +31,9 @@ const txSelect = {
   lat: transactions.lat,
   lon: transactions.lon,
   place: transactions.place,
+  city: transactions.city,
+  region: transactions.region,
+  paymentChannel: transactions.paymentChannel,
 };
 
 function fromTx(q: any) {

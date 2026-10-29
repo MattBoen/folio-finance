@@ -1,9 +1,10 @@
-import { eq, and, isNull } from "drizzle-orm";
+import { eq, and, isNull, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { plaidItems, accounts, transactions, netWorthSnapshots, categories } from "../db/schema.js";
 import { plaid } from "./plaid-client.js";
 import { decryptToken } from "./encryption.js";
 import { backfillSnapshots } from "./snapshot-backfill.js";
+import { addressFromStatement, applyKnownPlaces, researchMerchantPlaces } from "./merchant-places.js";
 import type { AccountBase, Transaction } from "plaid";
 
 export async function syncItem(plaidItemId: string, userId: string): Promise<void> {
@@ -19,6 +20,10 @@ export async function syncItem(plaidItemId: string, userId: string): Promise<voi
   await syncAccounts(item.id, userId, accessToken);
   await syncTransactions(item, userId, accessToken);
   await takeNetWorthSnapshot(userId);
+
+  // Map pins: reuse addresses already found, then look up new merchants in the background.
+  await applyKnownPlaces(userId).catch(() => 0);
+  void researchMerchantPlaces(userId).catch((err) => console.warn("[places] research failed:", err));
 }
 
 async function syncAccounts(
@@ -64,8 +69,8 @@ async function syncTransactions(
   userId: string,
   accessToken: string
 ): Promise<void> {
-  // Start from scratch once so older purchases pick up the locations the bank reports.
-  let cursor = item.placesBackfilled ? item.transactionCursor ?? undefined : undefined;
+  // Start from scratch once so older purchases pick up the locations, statement text and store numbers.
+  let cursor = item.placesBackfilled && item.detailsBackfilled ? item.transactionCursor ?? undefined : undefined;
   let hasMore = true;
 
   while (hasMore) {
@@ -83,7 +88,7 @@ async function syncTransactions(
 
   await db
     .update(plaidItems)
-    .set({ transactionCursor: cursor, placesBackfilled: true, updatedAt: new Date() })
+    .set({ transactionCursor: cursor, placesBackfilled: true, detailsBackfilled: true, updatedAt: new Date() })
     .where(eq(plaidItems.id, item.id));
 }
 
@@ -93,7 +98,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 async function syncPage(accessToken: string, cursor: string | undefined) {
   for (let attempt = 0; ; attempt++) {
     try {
-      const { data } = await plaid.transactionsSync({ access_token: accessToken, cursor });
+      const { data } = await plaid.transactionsSync({ access_token: accessToken, cursor, options: { include_original_description: true } });
       return data;
     } catch (err) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -166,9 +171,7 @@ async function upsertTransactions(txns: Transaction[], userId: string): Promise<
         merchantName: txn.merchant_name ?? null,
         isPending: txn.pending,
         categoryId,
-        lat: txn.location?.lat?.toString() ?? null,
-        lon: txn.location?.lon?.toString() ?? null,
-        place: placeOf(txn),
+        ...whereabouts(txn),
       })
       .onConflictDoUpdate({
         target: transactions.plaidTransactionId,
@@ -178,22 +181,37 @@ async function upsertTransactions(txns: Transaction[], userId: string): Promise<
           merchantName: txn.merchant_name ?? null,
           isPending: txn.pending,
           categoryId,
-          lat: txn.location?.lat?.toString() ?? null,
-          lon: txn.location?.lon?.toString() ?? null,
-          place: placeOf(txn),
+          ...whereabouts(txn),
+          // keep an address found earlier (statement or lookup) when the bank still sends none
+          place: sql`coalesce(excluded.place, ${transactions.place})`,
           updatedAt: new Date(),
         },
       });
   }
 }
 
-/** The purchase's street address from the bank, if it gave one. */
+/** The purchase's street address from the bank, if it gave one. A town alone isn't a place to pin. */
 function placeOf(txn: Transaction): string | null {
   const l = txn.location;
-  if (!l) return null;
+  if (!l?.address) return null;
   const cityLine = [l.city, [l.region, l.postal_code].filter(Boolean).join(" ")].filter(Boolean).join(", ");
-  const full = [l.address, cityLine].filter(Boolean).join(", ");
-  return full || null;
+  return [l.address, cityLine].filter(Boolean).join(", ");
+}
+
+/** Everything the bank tells us about where a purchase happened. */
+function whereabouts(txn: Transaction) {
+  const l = txn.location;
+  const description = txn.original_description ?? null;
+  return {
+    lat: l?.lat?.toString() ?? null,
+    lon: l?.lon?.toString() ?? null,
+    place: placeOf(txn) ?? addressFromStatement(description, l?.city),
+    city: l?.city ?? null,
+    region: l?.region ?? null,
+    paymentChannel: txn.payment_channel ?? null,
+    storeNumber: l?.store_number ?? null,
+    originalDescription: description,
+  };
 }
 
 async function removeTransactions(plaidTxnIds: string[]): Promise<void> {
