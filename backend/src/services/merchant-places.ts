@@ -178,10 +178,10 @@ Finish with only a JSON array in a \`\`\`json block, one object per purchase.`;
       messages.push({ role: "assistant", content: res.content });
       continue;
     }
-    if (res.stop_reason === "refusal") return null;
+    if (res.stop_reason === "refusal") { console.warn("[places] lookup declined"); return null; }
     const text = res.content.map((b) => (b.type === "text" ? b.text : "")).join("\n");
     const m = text.match(/```json\s*([\s\S]*?)```/) ?? text.match(/(\[[\s\S]*\])\s*$/);
-    if (!m) return null;
+    if (!m) { console.warn(`[places] no JSON in answer (stop: ${res.stop_reason})`); return null; }
     try {
       const arr = JSON.parse(m[1]);
       return Array.isArray(arr) ? arr : null;
@@ -201,7 +201,7 @@ export async function researchMerchantPlaces(userId: string): Promise<number> {
   try {
     await applyKnownPlaces(userId);
     const rows = await unplacedPurchases(userId);
-    if (rows.length === 0) return 0;
+    if (rows.length === 0) { console.log("[places] every in-store purchase already has an address"); return 0; }
     const done = new Set((await db.select({ key: merchantPlaces.key }).from(merchantPlaces).where(eq(merchantPlaces.userId, userId))).map((r) => r.key));
 
     const groups = new Map<string, Candidate>();
@@ -214,7 +214,8 @@ export async function researchMerchantPlaces(userId: string): Promise<number> {
       else groups.set(key, { key, name, storeNumber: t.storeNumber, city: t.city, region: t.region, statement: t.statement, count: 1 });
     }
     const todo = [...groups.values()].sort((a, b) => b.count - a.count).slice(0, PER_RUN);
-    if (todo.length === 0) return 0;
+    if (todo.length === 0) { console.log(`[places] ${rows.length} purchases without an address, all merchants already looked up`); return 0; }
+    console.log(`[places] ${rows.length} purchases without an address; looking up ${todo.length} merchants`);
 
     const areaRows = await db
       .select({ city: transactions.city, region: transactions.region })
@@ -233,6 +234,7 @@ export async function researchMerchantPlaces(userId: string): Promise<number> {
       } catch (err) {
         console.warn("[places] lookup failed:", (err as Error).message);
       }
+      console.log(`[places] batch ${i / BATCH + 1}: ${found ? `${found.filter((f) => f.address).length} of ${batch.length} found` : "no answer"}`);
       if (!found) continue;
       for (const f of found) {
         const c = batch[Number(f.id) - 1];
