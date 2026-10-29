@@ -233,6 +233,8 @@ export const netWorthSnapshots = pgTable(
     netWorth: numeric("net_worth", { precision: 18, scale: 2 }).notNull(),
     // Investment-account total on that day; null for snapshots taken before this was tracked.
     invested: numeric("invested", { precision: 18, scale: 2 }),
+    // True for days rebuilt from transaction history rather than recorded on the day.
+    estimated: boolean("estimated").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

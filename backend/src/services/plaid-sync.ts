@@ -3,6 +3,7 @@ import { db } from "../db/client.js";
 import { plaidItems, accounts, transactions, netWorthSnapshots, categories } from "../db/schema.js";
 import { plaid } from "./plaid-client.js";
 import { decryptToken } from "./encryption.js";
+import { backfillSnapshots } from "./snapshot-backfill.js";
 import type { AccountBase, Transaction } from "plaid";
 
 export async function syncItem(plaidItemId: string, userId: string): Promise<void> {
@@ -252,6 +253,14 @@ export async function takeNetWorthSnapshot(userId: string): Promise<void> {
         totalLiabilities: totalLiabilities.toFixed(2),
         netWorth: (totalAssets - totalLiabilities).toFixed(2),
         invested: invested.toFixed(2),
+        estimated: false,
       },
     });
+
+  // Graphs need history from before Folio was connected; rebuild it from transactions.
+  try {
+    await backfillSnapshots(userId);
+  } catch (err) {
+    console.warn("[snapshots] backfill failed:", err);
+  }
 }

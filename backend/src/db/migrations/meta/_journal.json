@@ -57,6 +57,13 @@
       "when": 1793219533035,
       "tag": "0007_hot_the_hunter",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793235854949,
+      "tag": "0008_colossal_violations",
+      "breakpoints": true
     }
   ]
 }
