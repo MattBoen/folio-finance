@@ -110,10 +110,26 @@ final class AuthManager: ObservableObject {
         }
     }
 
+    /// The refresh already on its way, if any. Screens that load together share it: the server swaps
+    /// the refresh token each time, so a second refresh with the old one would be turned away.
+    private var refreshing: Task<Void, Error>?
+
     func refresh() async throws {
+        if let refreshing { return try await refreshing.value }
         guard let raw = refreshToken else { throw APIError.unauthorized }
-        let response: AuthResponse = try await api.request(.refresh(token: raw))
-        store(response)
+        let task = Task { @MainActor in
+            do {
+                let response: AuthResponse = try await api.request(.refresh(token: raw))
+                store(response)
+            } catch APIError.unauthorized {
+                // The server no longer knows this login: go back to sign-in instead of showing a dead screen.
+                logout()
+                throw APIError.unauthorized
+            }
+        }
+        refreshing = task
+        defer { refreshing = nil }
+        try await task.value
     }
 
     func logout() {
@@ -176,7 +192,8 @@ final class AuthManager: ObservableObject {
         do {
             return try await api.request(endpoint, token: token)
         } catch APIError.unauthorized {
-            try await refresh()
+            // Another screen may have refreshed while this request was out; only refresh if the token is still the old one.
+            if accessToken == token { try await refresh() }
             guard let newToken = accessToken else { throw APIError.unauthorized }
             return try await api.request(endpoint, token: newToken)
         }

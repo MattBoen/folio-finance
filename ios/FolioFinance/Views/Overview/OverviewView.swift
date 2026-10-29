@@ -5,7 +5,8 @@ import Charts
 struct OverviewView: View {
     @EnvironmentObject private var auth: AuthManager
     @State private var accounts: [Account] = []
-    @State private var points: [Pt] = []
+    /// The whole year, loaded once; switching ranges just trims it, so it's instant.
+    @State private var allPoints: [Pt] = []
     @State private var monthTxns: [Transaction] = []
     @State private var budgets: [BudgetLine] = []
     @State private var range: Span = .ytd
@@ -43,6 +44,11 @@ struct OverviewView: View {
         let id: Int
         let date: Date
         let value: Double
+    }
+
+    private var points: [Pt] {
+        let cutoff = Calendar.current.date(byAdding: .day, value: -range.days, to: Date()) ?? .distantPast
+        return allPoints.filter { $0.date >= cutoff }
     }
 
     private var visible: [Account] { accounts.filter { !$0.isHidden } }
@@ -142,7 +148,6 @@ struct OverviewView: View {
             }
         }
         .task { await load() }
-        .onChange(of: range) { Task { await loadChart() } }
     }
 
     // MARK: Hero
@@ -245,7 +250,8 @@ struct OverviewView: View {
                         }
                     }
                     .frame(height: 180)
-                    .chartReveal(id: "\(range.rawValue)-\(points.count)")
+                    .animation(.smooth(duration: 0.35), value: range)
+                    .chartReveal(id: allPoints.count)
                     .sensitive()
                 } else {
                     Label("History builds up daily. Check back tomorrow for your trend line.", systemImage: "clock")
@@ -361,8 +367,8 @@ struct OverviewView: View {
             self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
         // Everything below is optional: accounts still show if any of it can't load.
-        if let c: NetWorthHistoryResponse = try? await auth.withFreshToken(.netWorthHistory(days: range.days)) {
-            points = Self.makePoints(c)
+        if let c: NetWorthHistoryResponse = try? await auth.withFreshToken(.netWorthHistory(days: Span.year.days)) {
+            allPoints = Self.makePoints(c)
         }
         let now = Date()
         let start = Calendar.current.date(from: Calendar.current.dateComponents([.year, .month], from: now)) ?? now
@@ -397,18 +403,12 @@ struct OverviewView: View {
         WidgetCenter.shared.reloadAllTimelines()
     }
 
-    private func loadChart() async {
-        if let resp: NetWorthHistoryResponse = try? await auth.withFreshToken(.netWorthHistory(days: range.days)) {
-            withAnimation(.smooth) { points = Self.makePoints(resp) }
-        }
-    }
-
     private static func makePoints(_ r: NetWorthHistoryResponse) -> [Pt] {
         r.snapshots
             .compactMap { s in parseDay(s.date).map { (d: $0, v: NSDecimalNumber(decimal: s.netWorthDecimal).doubleValue) } }
             .sorted { $0.d < $1.d }
-            .enumerated()
-            .map { Pt(id: $0.offset, date: $0.element.d, value: $0.element.v) }
+            // Keyed by day so the line keeps its shape when the range changes.
+            .map { Pt(id: Int($0.d.timeIntervalSince1970), date: $0.d, value: $0.v) }
     }
 }
 

@@ -5,7 +5,7 @@ import bcrypt from "bcryptjs";
 
 // bcrypt cost 10 is the standard minimum; 12 takes seconds on Render's small free CPU. Raise it when the server is upgraded.
 const BCRYPT_COST = Number(process.env.BCRYPT_COST ?? 10);
-import { eq, and, gt, isNull, isNotNull, lt, or } from "drizzle-orm";
+import { eq, and, gt, isNull, lt, or } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { users, refreshTokens } from "../db/schema.js";
 import {
@@ -41,11 +41,16 @@ const refreshSchema = z.object({
   refresh_token: z.string(),
 });
 
+/** A refresh token just swapped for a new one still works this long, so two screens refreshing together,
+ *  or a reply lost on a weak signal, doesn't sign the user out. */
+const ROTATION_GRACE_MS = 30_000;
+
 /** Retention: expired or revoked sessions are deleted whenever a user signs in or refreshes. */
 async function purgeDeadSessions(userId: string) {
+  const graceStart = new Date(Date.now() - ROTATION_GRACE_MS);
   await db
     .delete(refreshTokens)
-    .where(and(eq(refreshTokens.userId, userId), or(lt(refreshTokens.expiresAt, new Date()), isNotNull(refreshTokens.revokedAt))));
+    .where(and(eq(refreshTokens.userId, userId), or(lt(refreshTokens.expiresAt, new Date()), lt(refreshTokens.revokedAt, graceStart))));
 }
 
 async function issueTokenPair(userId: string, plan: string) {
@@ -178,21 +183,27 @@ auth.post(
     const [token] = await db
       .select()
       .from(refreshTokens)
-      .where(
-        and(
-          eq(refreshTokens.tokenHash, hash),
-          isNull(refreshTokens.revokedAt),
-          gt(refreshTokens.expiresAt, new Date())
-        )
-      );
+      .where(and(eq(refreshTokens.tokenHash, hash), gt(refreshTokens.expiresAt, new Date())));
 
     if (!token) return c.json({ error: "Invalid or expired refresh token" }, 401);
 
-    // Rotate: revoke old, issue new pair
-    await db
-      .update(refreshTokens)
-      .set({ revokedAt: new Date() })
-      .where(eq(refreshTokens.id, token.id));
+    if (token.revokedAt) {
+      // Only a token swapped moments ago by a refresh counts. Signing out revokes every session,
+      // so then no live session remains and this is still refused.
+      const recent = Date.now() - token.revokedAt.getTime() < ROTATION_GRACE_MS;
+      const [live] = await db
+        .select({ id: refreshTokens.id })
+        .from(refreshTokens)
+        .where(and(eq(refreshTokens.userId, token.userId), isNull(refreshTokens.revokedAt), gt(refreshTokens.expiresAt, new Date())))
+        .limit(1);
+      if (!recent || !live) return c.json({ error: "Invalid or expired refresh token" }, 401);
+    } else {
+      // Rotate: revoke old, issue new pair
+      await db
+        .update(refreshTokens)
+        .set({ revokedAt: new Date() })
+        .where(eq(refreshTokens.id, token.id));
+    }
 
     const [user] = await db
       .select({ id: users.id, plan: users.plan })

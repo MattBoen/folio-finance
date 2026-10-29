@@ -38,16 +38,8 @@ struct MoneyView: View {
                 }
                 .pickerStyle(.segmented)
                 .padding(.horizontal, 16).padding(.top, 4).padding(.bottom, 16)
-                .background {
-                    // No bar: solid page colour behind the switch with a short fade below, so cards slide away under it.
-                    Color(UIColor.systemGroupedBackground)
-                        .ignoresSafeArea(edges: .top)
-                        .overlay(alignment: .bottom) {
-                            LinearGradient(colors: [Color(UIColor.systemGroupedBackground), Color(UIColor.systemGroupedBackground).opacity(0)],
-                                           startPoint: .top, endPoint: .bottom)
-                                .frame(height: 14).offset(y: 14)
-                        }
-                }
+                // No bar: the page's own colour sits behind the switch, so cards slide away under it.
+                .background { PinnedBandBackground(tone: segment == .transactions ? .activity : .accounts) }
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) { ProfileMenu() }

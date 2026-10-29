@@ -4,6 +4,7 @@ import { app } from "../src/index.js";
 import { db, pool } from "../src/db/client.js";
 import { users, refreshTokens } from "../src/db/schema.js";
 import { eq } from "drizzle-orm";
+import { hashRefreshToken } from "../src/services/jwt.js";
 
 const client = testClient(app);
 
@@ -65,7 +66,24 @@ describe("Auth: refresh token rotation", () => {
     const { accessToken: at2, refreshToken: rt2 } = await res1.json() as any;
     expect(rt2).not.toBe(rt1);
 
-    // Old token is now invalid
+    // Old token still works for a few seconds, so screens refreshing together don't sign the user out
+    const res2 = await client.auth.refresh.$post({ json: { refresh_token: rt1 } });
+    expect(res2.status).toBe(200);
+
+    // After the grace period the old token is refused
+    await db.update(refreshTokens).set({ revokedAt: new Date(Date.now() - 60_000) }).where(eq(refreshTokens.tokenHash, hashRefreshToken(rt1)));
+    const res3 = await client.auth.refresh.$post({ json: { refresh_token: rt1 } });
+    expect(res3.status).toBe(401);
+    expect(at2).toBeTruthy();
+  });
+
+  it("refuses a just-swapped token after signing out everywhere", async () => {
+    const reg = await client.auth.register.$post({ json: { email, password } });
+    const { refreshToken: rt1 } = await reg.json() as any;
+    const res1 = await client.auth.refresh.$post({ json: { refresh_token: rt1 } });
+    const { accessToken } = await res1.json() as any;
+
+    await client.auth.session.$delete({}, { headers: { Authorization: `Bearer ${accessToken}` } });
     const res2 = await client.auth.refresh.$post({ json: { refresh_token: rt1 } });
     expect(res2.status).toBe(401);
   });

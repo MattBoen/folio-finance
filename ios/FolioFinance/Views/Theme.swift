@@ -51,6 +51,18 @@ struct Wash: View {
     }
 }
 
+/// Backing for a switch pinned at the top of a page: the page's own wash, lined up with the screen, so no band shows.
+struct PinnedBandBackground: View {
+    var tone: Tone
+
+    var body: some View {
+        Color.clear
+            .overlay(alignment: .top) { Wash(tone: tone).frame(height: UIScreen.main.bounds.height) }
+            .clipped()
+            .ignoresSafeArea(edges: .top)
+    }
+}
+
 // MARK: - Building blocks
 
 struct Card<Content: View>: View {

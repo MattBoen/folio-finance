@@ -14,7 +14,8 @@ struct InvestingView: View {
     @State private var showConnect = false
     @State private var showAge = false
     @State private var range: Span = .ytd
-    @State private var points: [Pt] = []
+    /// All three years, loaded once; switching ranges just trims it, so it's instant.
+    @State private var allPoints: [Pt] = []
     @State private var selectedDate: Date?
 
     /// Daily snapshots, so the shortest range is a month; a day view would have nothing to draw.
@@ -36,6 +37,11 @@ struct InvestingView: View {
         let id: Int
         let date: Date
         let value: Double
+    }
+
+    private var points: [Pt] {
+        let cutoff = Calendar.current.date(byAdding: .day, value: -range.days, to: Date()) ?? .distantPast
+        return allPoints.filter { $0.date >= cutoff }
     }
 
     enum InvestingSheet: Identifiable {
@@ -150,19 +156,19 @@ struct InvestingView: View {
             .sheet(isPresented: $showAge) { AgeSheet { Task { await load() } } }
         }
         .task { await load() }
-        .onChange(of: range) { _, _ in Task { await loadChart() } }
     }
 
     private func loadChart() async {
-        guard let r: NetWorthHistoryResponse = try? await auth.withFreshToken(.netWorthHistory(days: range.days)) else { return }
+        guard let r: NetWorthHistoryResponse = try? await auth.withFreshToken(.netWorthHistory(days: Span.threeYears.days)) else { return }
         let pts = r.snapshots
             .compactMap { s -> (Date, Double)? in
                 guard let inv = s.invested, let v = Double(inv), let d = parseDay(s.date) else { return nil }
                 return (d, v)
             }
             .sorted { $0.0 < $1.0 }
-            .enumerated().map { Pt(id: $0.offset, date: $0.element.0, value: $0.element.1) }
-        withAnimation(Motion.spring) { points = pts }
+            // Keyed by day so the line keeps its shape when the range changes.
+            .map { Pt(id: Int($0.0.timeIntervalSince1970), date: $0.0, value: $0.1) }
+        withAnimation(Motion.spring) { allPoints = pts }
     }
 
     // MARK: Cards
@@ -232,7 +238,8 @@ struct InvestingView: View {
                         }
                     }
                     .frame(height: 180)
-                    .chartReveal(id: "\(range.rawValue)-\(points.count)")
+                    .animation(.smooth(duration: 0.35), value: range)
+                    .chartReveal(id: allPoints.count)
                     .sensitive()
                 } else {
                     Label("History builds up daily. Check back soon for your trend line.", systemImage: "clock")
