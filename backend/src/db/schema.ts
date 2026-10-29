@@ -327,3 +327,24 @@ export const subscriptions = pgTable(
   },
   (t) => [uniqueIndex("subscriptions_user_idx").on(t.userId), uniqueIndex("subscriptions_customer_idx").on(t.stripeCustomerId)]
 );
+
+// ─── Historical security prices (cache for rebuilding investment history) ─────
+
+export const securityPrices = pgTable(
+  "security_prices",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ticker: text("ticker").notNull(),
+    date: date("date").notNull(),
+    close: numeric("close", { precision: 18, scale: 6 }).notNull(),
+  },
+  (t) => [uniqueIndex("security_prices_ticker_date_idx").on(t.ticker, t.date)]
+);
+
+export const priceFetches = pgTable("price_fetches", {
+  ticker: text("ticker").primaryKey(),
+  ok: boolean("ok").notNull(),
+  // earliest day the last fetch asked for
+  fromDate: date("from_date").notNull(),
+  fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
+});

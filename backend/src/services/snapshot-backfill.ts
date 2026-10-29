@@ -1,6 +1,7 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { accounts, transactions, netWorthSnapshots } from "../db/schema.js";
+import { investedHistory } from "./investment-history.js";
 
 const MAX_DAYS = 1095;
 
@@ -40,10 +41,12 @@ function addDays(date: string, n: number): string {
 export function rebuildHistory(
   accts: BackfillAccount[],
   txns: BackfillTxn[],
-  today: string
+  today: string,
+  since?: string
 ): DayTotals[] {
   const tracked = new Set(txns.map((t) => t.accountId));
-  const earliest = txns.reduce((min, t) => (t.date < min ? t.date : min), today);
+  let earliest = txns.reduce((min, t) => (t.date < min ? t.date : min), today);
+  if (since && since < earliest) earliest = since;
   const floor = addDays(today, -MAX_DAYS);
   // one day before the first transaction shows the balance the account opened with
   const opening = addDays(earliest, -1);
@@ -95,6 +98,12 @@ export function rebuildHistory(
   return out.reverse();
 }
 
+function lastDays(today: string, n: number): string[] {
+  const out: string[] = [];
+  for (let i = n; i >= 1; i--) out.push(addDays(today, -i));
+  return out;
+}
+
 /** Fills the days before Folio started recording with balances rebuilt from transactions. Never touches real snapshots. */
 export async function backfillSnapshots(userId: string): Promise<number> {
   const userAccounts = await db
@@ -107,14 +116,31 @@ export async function backfillSnapshots(userId: string): Promise<number> {
     .select({ accountId: transactions.accountId, date: transactions.date, amount: transactions.amount })
     .from(transactions)
     .where(and(eq(transactions.userId, userId), eq(transactions.isPending, false), isNull(transactions.deletedAt)));
-  if (rows.length === 0) return 0;
 
   const today = new Date().toISOString().slice(0, 10);
-  const days = rebuildHistory(
-    userAccounts.map((a) => ({ id: a.id, type: a.type, balance: parseFloat(a.balance ?? "0") })),
-    rows.map((r) => ({ accountId: r.accountId, date: r.date, amount: parseFloat(r.amount) })),
-    today
-  );
+  const bankTxns = rows.map((r) => ({ accountId: r.accountId, date: r.date, amount: parseFloat(r.amount) }));
+  const mapped = userAccounts.map((a) => ({ id: a.id, type: a.type, balance: parseFloat(a.balance ?? "0") }));
+
+  let days = rebuildHistory(mapped, bankTxns, today);
+  const investAccts = mapped.filter((a) => a.type === "investment");
+
+  // Investment accounts have no bank transactions, so give them their own history from holdings and prices.
+  let invested: Map<string, number> | null = null;
+  let flatInvested = 0;
+  if (investAccts.length > 0) {
+    try {
+      const wanted = days.length > 0 ? days.map((d) => d.date) : lastDays(today, 730);
+      const hist = await investedHistory(userId, wanted);
+      if (hist) {
+        const other = investAccts.filter((a) => !hist.rebuiltAccountIds.has(a.id)).reduce((n, a) => n + a.balance, 0);
+        flatInvested = investAccts.reduce((n, a) => n + a.balance, 0);
+        invested = new Map([...hist.byDay].map(([d, v]) => [d, v + other]));
+        if (days.length === 0) days = rebuildHistory(mapped, bankTxns, today, wanted[0]);
+      }
+    } catch (err) {
+      console.warn("[snapshots] investment history failed:", err);
+    }
+  }
   if (days.length === 0) return 0;
 
   for (let i = 0; i < days.length; i += 500) {
@@ -122,15 +148,20 @@ export async function backfillSnapshots(userId: string): Promise<number> {
     await db
       .insert(netWorthSnapshots)
       .values(
-        chunk.map((d) => ({
-          userId,
-          date: d.date,
-          totalAssets: d.totalAssets.toFixed(2),
-          totalLiabilities: d.totalLiabilities.toFixed(2),
-          netWorth: d.netWorth.toFixed(2),
-          invested: null, // investment history can't be rebuilt from bank transactions
-          estimated: true,
-        }))
+        chunk.map((d) => {
+          // swap the flat investment value for the rebuilt one on days we have it
+          const inv = invested?.get(d.date);
+          const delta = inv == null ? 0 : inv - flatInvested;
+          return {
+            userId,
+            date: d.date,
+            totalAssets: (d.totalAssets + delta).toFixed(2),
+            totalLiabilities: d.totalLiabilities.toFixed(2),
+            netWorth: (d.netWorth + delta).toFixed(2),
+            invested: inv == null ? null : inv.toFixed(2),
+            estimated: true,
+          };
+        })
       )
       .onConflictDoUpdate({
         target: [netWorthSnapshots.userId, netWorthSnapshots.date],
@@ -138,6 +169,7 @@ export async function backfillSnapshots(userId: string): Promise<number> {
           totalAssets: sql`excluded.total_assets`,
           totalLiabilities: sql`excluded.total_liabilities`,
           netWorth: sql`excluded.net_worth`,
+          invested: sql`excluded.invested`,
         },
         // only refresh days we estimated earlier; real recorded days stay as they are
         setWhere: eq(netWorthSnapshots.estimated, true),
