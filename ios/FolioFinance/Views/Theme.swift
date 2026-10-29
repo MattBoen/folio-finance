@@ -60,6 +60,8 @@ struct PinnedBandBackground: View {
             .overlay(alignment: .top) { Wash(tone: tone).frame(height: UIScreen.main.bounds.height) }
             .clipped()
             .ignoresSafeArea(edges: .top)
+            // The wash is screen-tall and only clipped visually; it must not catch the touches meant for the page.
+            .allowsHitTesting(false)
     }
 }
 
