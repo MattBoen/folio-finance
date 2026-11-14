@@ -142,6 +142,8 @@ router.patch(
       user_category_id: z.string().uuid().nullable().optional(),
       is_excluded: z.boolean().optional(),
       category: z.string().min(1).max(60).optional(),
+      // Also give every other transaction with this same merchant name the same category.
+      apply_to_similar: z.boolean().optional(),
     })
   ),
   async (c) => {
@@ -165,7 +167,21 @@ router.patch(
       .returning({ id: transactions.id });
 
     if (!updated) return c.json({ error: "Not found" }, 404);
-    return c.json({ ok: true, transaction: await loadTransaction(userId, txnId) });
+
+    let similarUpdated = 0;
+    const newCategoryId = set.userCategoryId as string | null | undefined;
+    if (patch.apply_to_similar && newCategoryId) {
+      const [me] = await db.select({ name: transactions.name }).from(transactions).where(eq(transactions.id, txnId));
+      if (me) {
+        const moved = await db
+          .update(transactions)
+          .set({ userCategoryId: newCategoryId, updatedAt: new Date() })
+          .where(and(eq(transactions.userId, userId), eq(transactions.name, me.name), isNull(transactions.deletedAt)))
+          .returning({ id: transactions.id });
+        similarUpdated = Math.max(0, moved.length - 1); // not counting the one just changed
+      }
+    }
+    return c.json({ ok: true, similar_updated: similarUpdated, transaction: await loadTransaction(userId, txnId) });
   }
 );
 

@@ -183,19 +183,18 @@ describe("ask engine", () => {
   });
 
   it("falls back after too many tool rounds", async () => {
-    const { client, calls } = scripted(Array.from({ length: 6 }, (_, i) => toolUse(`t${i}`, "get_overview", {})));
+    const { client, calls } = scripted(Array.from({ length: 5 }, (_, i) => toolUse(`t${i}`, "get_overview", {})));
     const out = await run(client);
-    expect(calls).toHaveLength(6);
+    expect(calls).toHaveLength(5);
     expect(out.answer).toMatch(/simpler question/);
   });
 
-  it("retries once without temperature if the model rejects it", async () => {
-    const err: any = Object.assign(new Error("temperature is not supported for this model"), { status: 400 });
-    const { client, calls } = scripted([err, text("ok")]);
+  it("sends no temperature, so current models answer in one request", async () => {
+    const { client, calls } = scripted([text("ok")]);
     const out = await run(client);
     expect(out.answer).toBe("ok");
-    expect(calls[0].temperature).toBe(0.2);
-    expect(calls[1].temperature).toBeUndefined();
+    expect(calls).toHaveLength(1);
+    expect(calls[0].temperature).toBeUndefined();
   });
 });
 
@@ -238,6 +237,8 @@ vi.mock("../src/middleware/auth.js", () => ({
 }));
 vi.mock("../src/middleware/rate-limit.js", () => ({ rateLimit: () => async (_c: any, next: any) => { await next(); } }));
 vi.mock("../src/services/ask-store.js", () => store);
+const spend = { reached: null as null | "user" | "global", added: [] as number[] };
+vi.mock("../src/services/ask-spend.js", () => ({ limitReached: async () => spend.reached, addSpend: async (_u: string, usd: number) => { spend.added.push(usd); } }));
 vi.mock("../src/services/anthropic.js", () => ({ getAnthropic: () => state.client, askConfigured: () => !!state.client }));
 vi.mock("../src/services/ask-data.js", () => ({
   todayIso: () => TODAY,
@@ -259,6 +260,7 @@ const SECRET_QUESTION = "How much did I spend at Whole Foods this month, my SSN 
 beforeEach(() => {
   state.settings = { enabled: true, dailyLimit: 30, usedToday: 0 };
   state.consume = true;
+  spend.reached = null; spend.added = [];
   state.client = scripted([text("You spent $142.30.")]).client;
   authUser = "u1";
   Object.values(store).forEach((m) => m.mockClear());
@@ -370,5 +372,28 @@ describe("/settings/ask", () => {
     expect(p.status).toBe(200);
     expect(store.setAskEnabled).toHaveBeenCalledWith("u1", true);
     expect((await app.request("/settings/ask", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ enabled: "yes" }) })).status).toBe(400);
+  });
+});
+
+describe("POST /ask dollar limits", () => {
+  it("rests politely when the user's monthly cap is reached, without calling Claude", async () => {
+    spend.reached = "user";
+    const calls = vi.fn();
+    state.client = { messages: { create: calls } } as any;
+    const r = await ask([{ role: "user", content: "hi" }]);
+    expect(r.status).toBe(429);
+    expect((await r.json()).error).toMatch(/resting until the 1st/);
+    expect(calls).not.toHaveBeenCalled();
+  });
+  it("shuts Ask off for everyone when the whole-app cap is reached", async () => {
+    spend.reached = "global";
+    const r = await ask([{ role: "user", content: "hi" }]);
+    expect(r.status).toBe(503);
+    expect(store.consumeAsk).not.toHaveBeenCalledWith("u1", expect.anything());
+  });
+  it("records what a question cost", async () => {
+    state.client = scripted([{ stop_reason: "end_turn", content: [{ type: "text", text: "ok" }], usage: { input_tokens: 2000, output_tokens: 100 } }]).client;
+    await ask([{ role: "user", content: "hi" }]);
+    expect(spend.added[0]).toBeGreaterThan(0);
   });
 });

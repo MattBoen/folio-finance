@@ -158,8 +158,21 @@ async function upsertFetch(ticker: string, ok: boolean, fromDate: string) {
 
 // ── Plaid investments (cached in memory so frequent syncs don't re-bill) ─────
 
+/** One position, as the bank reports it today. */
+export interface HoldingDetail {
+  accountId: string;
+  ticker: string | null;
+  name: string;
+  kind: string;            // equity | etf | mutual fund | fixed income | cash | other
+  quantity: number;
+  price: number;
+  value: number;
+  costBasis: number | null; // total paid, when the bank tells us
+}
+
 interface PlaidInvData {
   securities: Map<string, SecurityInfo>;
+  detail: HoldingDetail[];
   holdings: HoldingNow[];
   txns: InvTxn[];
   accountIds: Set<string>; // our account ids that were rebuilt
@@ -178,7 +191,7 @@ async function fetchPlaidInvestments(userId: string): Promise<PlaidInvData | nul
     .where(and(eq(accounts.userId, userId), eq(accounts.type, "investment"), isNull(accounts.deletedAt)));
   const idByPlaid = new Map(ours.filter((a) => a.plaidAccountId).map((a) => [a.plaidAccountId!, a.id]));
 
-  const data: PlaidInvData = { securities: new Map(), holdings: [], txns: [], accountIds: new Set() };
+  const data: PlaidInvData = { securities: new Map(), detail: [], holdings: [], txns: [], accountIds: new Set() };
   const end = new Date().toISOString().slice(0, 10);
   const startD = new Date();
   startD.setFullYear(startD.getFullYear() - 2);
@@ -204,6 +217,18 @@ async function fetchPlaidInvestments(userId: string): Promise<PlaidInvData | nul
         const info = data.securities.get(hold.security_id);
         if (info && !info.fallbackPrice && hold.institution_price) info.fallbackPrice = hold.institution_price;
         data.holdings.push({ accountId: id, key: hold.security_id, quantity: hold.quantity });
+        const sec = h.securities.find((x) => x.security_id === hold.security_id);
+        const isCash = sec?.type === "cash" || (sec?.is_cash_equivalent === true && !sec?.ticker_symbol);
+        data.detail.push({
+          accountId: id,
+          ticker: isCash ? null : (sec?.ticker_symbol ?? null),
+          name: sec?.name ?? sec?.ticker_symbol ?? "Holding",
+          kind: isCash ? "cash" : (sec?.type ?? "other"),
+          quantity: hold.quantity,
+          price: hold.institution_price ?? 0,
+          value: hold.institution_value ?? hold.quantity * (hold.institution_price ?? 0),
+          costBasis: hold.cost_basis ?? null,
+        });
       }
 
       let offset = 0;
@@ -261,6 +286,29 @@ export async function investedHistory(
   const prices = await loadPrices(tickers, [...days].sort()[0]);
   const byDay = rebuildInvested(data.securities, data.holdings, data.txns, prices, days);
   return { byDay, rebuiltAccountIds: data.accountIds };
+}
+
+/** One account's rebuilt investment value per day (same method as investedHistory, limited to that account). Null when Plaid can't give holdings for it. */
+export async function accountInvestedHistory(
+  userId: string,
+  accountId: string,
+  days: string[]
+): Promise<Map<string, number> | null> {
+  if (days.length === 0) return null;
+  const data = await fetchPlaidInvestments(userId);
+  if (!data || !data.accountIds.has(accountId)) return null;
+  const holdings = data.holdings.filter((h) => h.accountId === accountId);
+  const txns = data.txns.filter((t) => t.accountId === accountId);
+  const tickers: string[] = [];
+  for (const s of data.securities.values()) if (s.ticker) tickers.push(s.ticker);
+  const prices = await loadPrices(tickers, [...days].sort()[0]);
+  return rebuildInvested(data.securities, holdings, txns, prices, days);
+}
+
+/** Today's positions for every investment account, with what each is worth and (when known) the gain since it was bought. */
+export async function currentHoldings(userId: string): Promise<HoldingDetail[]> {
+  const data = await fetchPlaidInvestments(userId);
+  return data?.detail ?? [];
 }
 
 export function clearInvestmentCache(userId?: string) {

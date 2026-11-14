@@ -1,4 +1,4 @@
-import { eq, and, isNull, sql } from "drizzle-orm";
+import { eq, and, isNull, isNotNull, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { plaidItems, accounts, transactions, netWorthSnapshots, categories } from "../db/schema.js";
 import { plaid } from "./plaid-client.js";
@@ -147,6 +147,19 @@ async function categoryIdFor(name: string): Promise<string> {
   return id;
 }
 
+/**
+ * If you have always filed this exact merchant name under one category, new purchases from it go there too,
+ * so you fix a merchant once and it stays fixed. Mixed history means no guess.
+ */
+async function inheritedCategory(userId: string, name: string): Promise<string | null> {
+  const rows = await db
+    .selectDistinct({ id: transactions.userCategoryId })
+    .from(transactions)
+    .where(and(eq(transactions.userId, userId), eq(transactions.name, name), isNotNull(transactions.userCategoryId), isNull(transactions.deletedAt)))
+    .limit(2);
+  return rows.length === 1 ? rows[0].id : null;
+}
+
 async function upsertTransactions(txns: Transaction[], userId: string): Promise<void> {
   for (const txn of txns) {
     const [acct] = await db
@@ -157,6 +170,7 @@ async function upsertTransactions(txns: Transaction[], userId: string): Promise<
     if (!acct) continue;
 
     const categoryId = await categoryIdFor(friendlyCategory(txn));
+    const userCategoryId = await inheritedCategory(userId, txn.name);
 
     await db
       .insert(transactions)
@@ -171,6 +185,7 @@ async function upsertTransactions(txns: Transaction[], userId: string): Promise<
         merchantName: txn.merchant_name ?? null,
         isPending: txn.pending,
         categoryId,
+        userCategoryId,
         ...whereabouts(txn),
       })
       .onConflictDoUpdate({

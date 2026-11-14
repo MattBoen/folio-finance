@@ -8,7 +8,10 @@ import { rateLimit } from "../middleware/rate-limit.js";
 import { getAnthropic } from "../services/anthropic.js";
 import * as data from "../services/ask-data.js";
 import * as store from "../services/ask-store.js";
-import { runAsk, type AskClient, type AskData } from "../services/ask-engine.js";
+import { runAsk, HISTORY_MESSAGES, type AskClient, type AskData } from "../services/ask-engine.js";
+import { askModel } from "../services/ask-cost.js";
+import { addSpend, limitReached } from "../services/ask-spend.js";
+import { aiPick, getEmergencyFund, loadCash, savePicks, type ModelClient } from "../services/emergency-fund.js";
 
 const router = new Hono();
 
@@ -39,7 +42,7 @@ const body = z.object({
 
 router.post("/", requireAuth, requireEntitled, rateLimit({ max: 10, windowMs: 60_000 }), zValidator("json", body), async (c) => {
   const { userId } = c.get("auth");
-  const messages = c.req.valid("json").messages.slice(-10);
+  const messages = c.req.valid("json").messages.slice(-HISTORY_MESSAGES);
   if (messages[messages.length - 1].role !== "user") return c.json({ error: "The last message must be from you." }, 400);
   while (messages.length > 1 && messages[0].role !== "user") messages.shift();
 
@@ -49,22 +52,30 @@ router.post("/", requireAuth, requireEntitled, rateLimit({ max: 10, windowMs: 60
   const client = getAnthropic();
   if (!client) return c.json({ error: "Ask isn't available right now.", code: "ask_unavailable" }, 503);
 
+  // Dollar limits: one kill switch for the whole app, one cap per user per month. Friendly text, nothing scary.
+  const reached = await limitReached(userId);
+  if (reached === "global") return c.json({ error: "Ask Folio is resting for now. It will be back soon.", code: "ask_unavailable" }, 503);
+  if (reached === "user") return c.json({ error: "Ask Folio is resting until the 1st. Your questions refill at the start of next month.", code: "ask_limit" }, 429);
+
   if (!(await store.consumeAsk(userId, settings.dailyLimit))) {
     return c.json({ error: `You've reached today's limit of ${settings.dailyLimit} questions. It resets tomorrow.`, code: "ask_limit" }, 429);
   }
 
   const started = Date.now();
   const hash = userHash(userId);
+  let spent = 0;
   try {
     const out = await runAsk({
       client: client as unknown as AskClient,
-      model: process.env.ASK_MODEL || "claude-sonnet-5-5",
+      model: askModel(), onCost: (usd) => { spent += usd; },
       userId, userHash: hash, today: data.todayIso(), messages, data: realData,
     });
     // Metadata only: never the question, the answer, or any numbers.
     console.log(`[ask] user=${hash.slice(0, 8)} tools=${out.tools.join(",") || "none"} rounds=${out.rounds} ms=${Date.now() - started}`);
+    await addSpend(userId, spent).catch(() => {});
     return c.json({ answer: out.answer, facts: out.facts, proposal: out.proposal });
   } catch (e) {
+    await addSpend(userId, spent).catch(() => {}); // money already spent still counts, even when the question failed
     await store.refundAsk(userId).catch(() => {});
     console.error(`[ask] user=${hash.slice(0, 8)} failed status=${(e as { status?: number }).status ?? "n/a"} ms=${Date.now() - started}`);
     return c.json({ error: "Ask couldn't answer just now. Please try again.", code: "ask_failed" }, 502);
@@ -89,6 +100,22 @@ router.post("/dismiss", requireAuth, rateLimit({ max: 20, windowMs: 60_000 }), z
   const ok = await store.dismissProposal(userId, c.req.valid("json").proposalId);
   if (!ok) return c.json({ error: "Not found" }, 404);
   return c.json({ ok: true });
+});
+
+// Ask Folio sorts which bank accounts are your emergency fund. Same switch and credit limits as a question,
+// but it doesn't use up one of today's questions: it's one tiny Haiku call, and only when your accounts change.
+router.post("/emergency-fund", requireAuth, requireEntitled, rateLimit({ max: 5, windowMs: 60_000 }), async (c) => {
+  const { userId } = c.get("auth");
+  const settings = await store.getAskSettings(userId);
+  const client = getAnthropic();
+  if (!settings.enabled || !client || (await limitReached(userId))) return c.json(await getEmergencyFund(userId));
+  const cash = await loadCash(userId, data.todayIso());
+  let spent = 0;
+  const found = await aiPick(cash, client as unknown as ModelClient, (usd) => { spent += usd; }).catch(() => null);
+  await addSpend(userId, spent).catch(() => {});
+  if (found) await savePicks(userId, cash, found);
+  console.log(`[ask] user=${userHash(userId).slice(0, 8)} sorted-emergency-fund ok=${Boolean(found)}`);
+  return c.json(await getEmergencyFund(userId));
 });
 
 export { router as askRouter };

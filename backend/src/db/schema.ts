@@ -194,6 +194,15 @@ export const userSettings = pgTable("user_settings", {
   birthYear: integer("birth_year"),
   askEnabled: boolean("ask_enabled").notNull().default(false),
   askConsentedAt: timestamp("ask_consented_at", { withTimezone: true }),
+  // Emergency fund: which accounts count (your choices, by account id), what it's measured against,
+  // and Folio's own picks (saved so the AI only runs again when your accounts change).
+  emergencyIncluded: jsonb("emergency_included").$type<Record<string, boolean>>(),
+  emergencyBasis: text("emergency_basis"),
+  // Savings rate's spending yardstick. Empty means "the same as the emergency fund".
+  savingsBasis: text("savings_basis"),
+  // Card limits you typed in, by account id (used when the bank doesn't report one, or reports it wrong).
+  creditLimits: jsonb("credit_limits").$type<Record<string, number>>(),
+  emergencyPicks: jsonb("emergency_picks").$type<{ signature: string; at: string; by: "ai" | "rules"; picks: Record<string, { emergency: boolean; confident: boolean; reason: string }> }>(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -207,6 +216,18 @@ export const askUsage = pgTable(
     count: integer("count").notNull().default(0),
   },
   (t) => [primaryKey({ columns: [t.userId, t.day] })]
+);
+
+// Estimated API dollars spent on Ask per user per month (millionths of a dollar). Never message text.
+export const askSpend = pgTable(
+  "ask_spend",
+  {
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    month: text("month").notNull(),
+    microUsd: integer("micro_usd").notNull().default(0),
+    questions: integer("questions").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.month] })]
 );
 
 export const askProposals = pgTable(

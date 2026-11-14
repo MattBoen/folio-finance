@@ -1,14 +1,10 @@
 import { and, eq, isNull, sql, desc } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { transactions, merchantPlaces, categories } from "../db/schema.js";
-import { getAnthropic } from "./anthropic.js";
 
 // Where purchases happened, for the map on a transaction. The bank's own street address wins; then the
-// street address many cards print at the end of the statement line; then a one-time web lookup per merchant.
+// street address many cards print at the end of the statement line; then Apple Maps search on the phone.
 
-const MODEL = process.env.MERCHANT_MODEL ?? "claude-opus-5-5";
-const BATCH = 8;
-const PER_RUN = 48;
 const NO_PLACE_CATEGORIES = ["Income", "Transfer", "Subscriptions", "Bills & Utilities", "Fees"];
 
 const STATE = /^(AL|AK|AZ|AR|CA|CO|CT|DE|DC|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)$/;
@@ -125,139 +121,10 @@ export async function applyKnownPlaces(userId: string): Promise<number> {
   return n;
 }
 
-function homeArea(rows: { city: string | null; region: string | null }[]): string {
-  const counts = new Map<string, number>();
-  for (const r of rows) if (r.city && r.region) counts.set(`${r.city}, ${r.region}`, (counts.get(`${r.city}, ${r.region}`) ?? 0) + 1);
-  return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4).map(([c, n]) => `${c} (${n} purchases)`).join("; ");
-}
-
-interface Found { id: number; address: string | null; city: string | null; region: string | null; postal: string | null; confidence: string | null }
-
-async function lookUp(batch: Candidate[], area: string): Promise<Found[] | null> {
-  const client = getAnthropic();
-  if (!client) return null;
-  const prompt = `Find where each of these card purchases happened, so the app can put a pin on a map. Use web search.
-
-${area ? `Most of this person's in-store purchases are in: ${area}. When a chain has several locations, prefer the one in or nearest those towns.` : "The person lives in the United States."}
-
-For each purchase, return:
-- "id": the number given below
-- "address": the street address of the specific location, house number first (e.g. "1912 Valley Bluffs Dr SE"). A store number identifies the exact store: look it up in the chain's store locator. If you can only narrow it to a town, use null.
-- "city", "region" (2-letter state), "postal": strings or null
-- "confidence": "high" when the store number, statement text or a single location in that town makes it certain; "medium" when you picked the most likely of a few nearby locations; "low" when you are guessing or it is an online-only business
-
-Purchases (merchant · store number · town the bank reported · statement text · times bought):
-${batch.map((c, i) => `${i + 1}. ${c.name} · ${c.storeNumber ?? "-"} · ${[c.city, c.region].filter(Boolean).join(", ") || "-"} · ${c.statement ?? "-"} · ${c.count}x`).join("\n")}
-
-Finish with only a JSON array in a \`\`\`json block, one object per purchase.`;
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const messages: any[] = [{ role: "user", content: prompt }];
-  for (let turn = 0; turn < 5; turn++) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const params: any = {
-      model: MODEL,
-      max_tokens: 16000,
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
-      output_config: { effort: "medium" },
-      tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 12 }],
-      messages,
-    };
-    let res;
-    try {
-      res = await client.beta.messages.create(params, { timeout: 300_000 });
-    } catch (err) {
-      // If the account can't use the fallback option, ask again without it rather than giving up.
-      if ((err as { status?: number }).status !== 400) throw err;
-      delete params.betas;
-      delete params.fallbacks;
-      res = await client.beta.messages.create(params, { timeout: 300_000 });
-    }
-    if (res.stop_reason === "pause_turn") {
-      messages.push({ role: "assistant", content: res.content });
-      continue;
-    }
-    if (res.stop_reason === "refusal") { console.warn("[places] lookup declined"); return null; }
-    const text = res.content.map((b) => (b.type === "text" ? b.text : "")).join("\n");
-    const m = text.match(/```json\s*([\s\S]*?)```/) ?? text.match(/(\[[\s\S]*\])\s*$/);
-    if (!m) { console.warn(`[places] no JSON in answer (stop: ${res.stop_reason})`); return null; }
-    try {
-      const arr = JSON.parse(m[1]);
-      return Array.isArray(arr) ? arr : null;
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
-
-const running = new Set<string>();
-
-/** Looks up merchants that still have no address. One web lookup per merchant, ever; runs in the background. */
-export async function researchMerchantPlaces(userId: string): Promise<number> {
-  if (process.env.MERCHANT_LOOKUP === "off" || !getAnthropic() || running.has(userId)) return 0;
-  running.add(userId);
-  try {
-    await applyKnownPlaces(userId);
-    const rows = await unplacedPurchases(userId);
-    if (rows.length === 0) { console.log("[places] every in-store purchase already has an address"); return 0; }
-    const done = new Set((await db.select({ key: merchantPlaces.key }).from(merchantPlaces).where(eq(merchantPlaces.userId, userId))).map((r) => r.key));
-
-    const groups = new Map<string, Candidate>();
-    for (const t of rows) {
-      const name = t.merchantName ?? t.name;
-      const key = merchantKey(name, t.storeNumber, t.city);
-      if (done.has(key)) continue;
-      const g = groups.get(key);
-      if (g) g.count++;
-      else groups.set(key, { key, name, storeNumber: t.storeNumber, city: t.city, region: t.region, statement: t.statement, count: 1 });
-    }
-    const todo = [...groups.values()].sort((a, b) => b.count - a.count).slice(0, PER_RUN);
-    if (todo.length === 0) { console.log(`[places] ${rows.length} purchases without an address, all merchants already looked up`); return 0; }
-    console.log(`[places] ${rows.length} purchases without an address; looking up ${todo.length} merchants`);
-
-    const areaRows = await db
-      .select({ city: transactions.city, region: transactions.region })
-      .from(transactions)
-      .where(and(eq(transactions.userId, userId), isNull(transactions.deletedAt)))
-      .orderBy(desc(transactions.date))
-      .limit(500);
-    const area = homeArea(areaRows);
-
-    let saved = 0;
-    for (let i = 0; i < todo.length; i += BATCH) {
-      const batch = todo.slice(i, i + BATCH);
-      let found: Found[] | null = null;
-      try {
-        found = await lookUp(batch, area);
-      } catch (err) {
-        console.warn("[places] lookup failed:", (err as Error).message);
-      }
-      console.log(`[places] batch ${i / BATCH + 1}: ${found ? `${found.filter((f) => f.address).length} of ${batch.length} found` : "no answer"}`);
-      if (!found) continue;
-      for (const f of found) {
-        const c = batch[Number(f.id) - 1];
-        if (!c) continue;
-        await db
-          .insert(merchantPlaces)
-          .values({
-            userId,
-            key: c.key,
-            address: f.address ?? null,
-            city: f.city ?? c.city,
-            region: f.region ?? c.region,
-            postal: f.postal ?? null,
-            confidence: f.confidence ?? "low",
-          })
-          .onConflictDoNothing();
-        saved++;
-      }
-    }
-    const placed = await applyKnownPlaces(userId);
-    console.log(`[places] looked up ${saved} of ${todo.length} merchants; ${placed} purchases got an address`);
-    return saved;
-  } finally {
-    running.delete(userId);
-  }
+/**
+ * Merchant addresses now come only from the bank, the statement line, and Apple Maps search on the phone.
+ * There is no Claude or web-search lookup here, so a bank sync never spends API credits.
+ */
+export async function researchMerchantPlaces(_userId: string): Promise<number> {
+  return 0;
 }

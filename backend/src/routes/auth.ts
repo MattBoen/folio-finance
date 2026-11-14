@@ -17,6 +17,7 @@ import { verifyAppleIdentityToken } from "../services/apple-auth.js";
 import { getEntitlements } from "../services/entitlements.js";
 import { requireAuth } from "../middleware/auth.js";
 import { rateLimit } from "../middleware/rate-limit.js";
+import { AttemptLimiter, currentCode, sendResetEmail, verifyResetCode } from "../services/password-reset.js";
 
 const auth = new Hono();
 
@@ -73,6 +74,55 @@ auth.post(
       .from(users)
       .where(and(eq(users.email, email), isNull(users.deletedAt)));
     return c.json({ exists: Boolean(existing) });
+  }
+);
+
+// ── Forgot password ──────────────────────────────────────────────────────────
+const sendLimiter = new AttemptLimiter(3, 60 * 60_000);     // 3 emails per address per hour
+const guessLimiter = new AttemptLimiter(5, 30 * 60_000);    // 5 wrong codes per address per 30 minutes
+
+// POST /auth/forgot: emails a 6-digit code. Always answers the same way so it can't be used to find out who has an account.
+auth.post(
+  "/forgot",
+  rateLimit({ max: 5, windowMs: 60_000 }),
+  zValidator("json", z.object({ email: emailField })),
+  async (c) => {
+    const { email } = c.req.valid("json");
+    const [user] = await db
+      .select({ passwordHash: users.passwordHash })
+      .from(users)
+      .where(and(eq(users.email, email), isNull(users.deletedAt)));
+    if (user?.passwordHash && sendLimiter.take(email)) {
+      await sendResetEmail(email, currentCode(email, user.passwordHash));
+    }
+    return c.json({ ok: true });
+  }
+);
+
+// POST /auth/reset: checks the code, sets the new password, signs every other device out and signs this one in.
+auth.post(
+  "/reset",
+  rateLimit({ max: 10, windowMs: 60_000 }),
+  zValidator("json", z.object({ email: emailField, code: z.string().regex(/^\d{6}$/), password: z.string().min(8).max(128) })),
+  async (c) => {
+    const { email, code, password } = c.req.valid("json");
+    if (!guessLimiter.take(email)) return c.json({ error: "Too many tries. Wait a little while, then ask for a new code." }, 429);
+
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(and(eq(users.email, email), isNull(users.deletedAt)));
+    if (!user?.passwordHash || !verifyResetCode(email, user.passwordHash, code)) {
+      return c.json({ error: "That code isn't right, or it has expired." }, 400);
+    }
+
+    const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
+    await db.update(users).set({ passwordHash }).where(eq(users.id, user.id));
+    await db.update(refreshTokens).set({ revokedAt: new Date() }).where(and(eq(refreshTokens.userId, user.id), isNull(refreshTokens.revokedAt)));
+    guessLimiter.clear(email);
+
+    const tokens = await issueTokenPair(user.id, user.plan);
+    return c.json(tokens);
   }
 );
 

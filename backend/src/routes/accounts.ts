@@ -7,6 +7,7 @@ import { accounts, plaidItems, netWorthSnapshots } from "../db/schema.js";
 import { requireAuth } from "../middleware/auth.js";
 import { takeNetWorthSnapshot } from "../services/plaid-sync.js";
 import { refreshVehicleValues } from "../services/vehicle-values.js";
+import { accountInvestedHistory } from "../services/investment-history.js";
 
 const router = new Hono();
 
@@ -198,6 +199,33 @@ router.get(
       .limit(days);
 
     return c.json({ snapshots: rows });
+  }
+);
+
+// ── One investment account's value over time ──────────────────────────────────
+router.get(
+  "/:id/history",
+  requireAuth,
+  zValidator("query", z.object({ days: z.coerce.number().int().min(7).max(1095).default(365) })),
+  async (c) => {
+    const { userId } = c.get("auth");
+    const { days } = c.req.valid("query");
+    const id = c.req.param("id");
+    const [acct] = await db
+      .select({ id: accounts.id, balance: accounts.balanceCurrent })
+      .from(accounts)
+      .where(and(eq(accounts.id, id), eq(accounts.userId, userId), isNull(accounts.deletedAt)));
+    if (!acct) return c.json({ error: "Account not found" }, 404);
+
+    const list: string[] = [];
+    for (let i = days; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      list.push(d.toISOString().slice(0, 10));
+    }
+    const byDay = await accountInvestedHistory(userId, id, list).catch(() => null);
+    if (!byDay) return c.json({ snapshots: [] });
+    return c.json({ snapshots: list.filter((d) => byDay.has(d)).map((d) => ({ date: d, value: (byDay.get(d) as number).toFixed(2) })) });
   }
 );
 

@@ -6,6 +6,7 @@ import { SP500_AS_OF, SP500_CAVEAT, sp500ReturnBetween } from "./sp500.js";
 import type { BudgetProposal, BudgetPlanProposal, ChangesProposal, Proposal } from "./ask-store.js";
 import { changeOp, type ChangeOp } from "./ask-changes.js";
 import type { SpendingArgs, FindTxArgs } from "./ask-data.js";
+import { costOf, QUESTION_LIMIT_USD, type Usage } from "./ask-cost.js";
 
 export interface Fact { label: string; value: string }
 export interface ProposalOut { id: string; kind: "budget" | "budget_plan" | "changes"; title: string; detail: string; category: string; currentAmount: number; newAmount: number; items?: { category: string; currentAmount: number; newAmount: number }[] }
@@ -304,25 +305,24 @@ export function systemPrompt(today: string): string {
 // ── Model client (structural, so tests can fake it) ──────────────────────────
 
 interface Block { type: string; text?: string; id?: string; name?: string; input?: unknown }
-interface ModelResponse { content: Block[]; stop_reason: string | null }
+interface ModelResponse { content: Block[]; stop_reason: string | null; usage?: Usage }
 export interface AskClient { messages: { create(params: any): Promise<ModelResponse> } }
 
-const MAX_ROUNDS = 6;
-const MAX_RESULT_CHARS = 6000;
+// Keep each question small: answers, history, tool rounds and tool results are all capped.
+const MAX_ROUNDS = 5;
+const MAX_RESULT_CHARS = 5000;
+const MAX_TOKENS = 1500;
+export const HISTORY_MESSAGES = 8;
+export const HISTORY_CHARS = 1500;
 
 function clip(value: unknown): string {
   const s = JSON.stringify(value);
   return s.length > MAX_RESULT_CHARS ? s.slice(0, MAX_RESULT_CHARS) + '…(truncated)' : s;
 }
 
+// No temperature: current models reject it, which cost every step a failed request and a retry.
 async function callModel(client: AskClient, params: Record<string, unknown>): Promise<ModelResponse> {
-  try {
-    return await client.messages.create({ ...params, temperature: 0.2 });
-  } catch (e) {
-    const err = e as { status?: number; message?: string };
-    if (err.status === 400 && /temperature/i.test(err.message ?? "")) return client.messages.create(params);
-    throw e;
-  }
+  return client.messages.create(params);
 }
 
 /** Turns everything the model queued into one Confirm card. */
@@ -350,9 +350,14 @@ export async function runAsk(opts: {
   today: string;
   messages: ChatMessage[];
   data: AskData;
+  /** Called with the dollars each response cost, so spend is recorded even if the question later fails. */
+  onCost?: (usd: number) => void;
 }): Promise<AskResult> {
   const { client, model, userId, today, data } = opts;
-  const convo: { role: "user" | "assistant"; content: unknown }[] = opts.messages.map((m) => ({ role: m.role, content: m.content }));
+  const convo: { role: "user" | "assistant"; content: unknown }[] = opts.messages
+    .slice(-HISTORY_MESSAGES)
+    .map((m) => ({ role: m.role, content: m.content.length > HISTORY_CHARS ? m.content.slice(0, HISTORY_CHARS) : m.content }));
+  let questionCost = 0;
   const facts = new Map<string, Fact>();
   const used: string[] = [];
   let proposal: ProposalOut | null = null;
@@ -360,9 +365,16 @@ export async function runAsk(opts: {
 
   for (let round = 1; round <= MAX_ROUNDS; round++) {
     const res = await callModel(client, {
-      model, max_tokens: 900, system: systemPrompt(today), tools: toolSchemas(), messages: convo,
+      model, max_tokens: MAX_TOKENS, system: systemPrompt(today), tools: toolSchemas(), messages: convo,
       metadata: { user_id: opts.userHash },
     });
+    const cost = costOf(res.usage);
+    questionCost += cost;
+    opts.onCost?.(cost);
+    // One question never spends more than the per-question cap, even if it wants more lookups.
+    if (questionCost >= QUESTION_LIMIT_USD && res.stop_reason === "tool_use") {
+      return { answer: "That question needed more digging than I can do in one go. Try a simpler or more specific one.", facts: [...facts.values()].slice(0, 8), proposal: proposal ?? (await bundleQueued(ctx)), tools: used, rounds: round };
+    }
 
     const toolUses = res.content.filter((b) => b.type === "tool_use");
     if (res.stop_reason !== "tool_use" || toolUses.length === 0) {

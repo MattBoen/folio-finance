@@ -33,7 +33,13 @@ services:
       - key: ASK_DAILY_LIMIT
         value: "30"
       - key: ASK_MODEL
-        value: claude-sonnet-5-5
+        value: claude-haiku-5-5
+      - key: ASK_USER_MONTHLY_LIMIT
+        value: "0.5"
+      - key: ASK_GLOBAL_MONTHLY_LIMIT
+        value: "10"
+      - key: MERCHANT_LOOKUP
+        value: "off"
       - key: BILLING_ENFORCED
         value: "false"
       - key: BILLING_TRIAL_DAYS
