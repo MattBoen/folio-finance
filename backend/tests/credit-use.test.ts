@@ -18,3 +18,19 @@ describe("summarizeCredit", () => {
     expect(summarizeCredit([card("a", 100, null)], {}).rate).toBeNull();
   });
 });
+
+describe("charge cards (no preset limit)", () => {
+  const amex = { id: "g", name: "Classic Green Card", institution: "American Express", balance: 700, reported: null };
+  it("Folio recognizes Amex charge cards and leaves them out of credit use", () => {
+    const r = summarizeCredit([amex, card("a", 1000, 5000)], {});
+    expect(r.cards[0]).toMatchObject({ noLimit: true, limitSource: "rules", limit: null });
+    expect(r).toMatchObject({ balance: 1000, limit: 5000, rate: 0.2, missing: 0 });
+  });
+  it("you can mark any card as having no limit, or give a recognized one a limit", () => {
+    expect(summarizeCredit([card("b", 300, null)], { b: "none" }).cards[0]).toMatchObject({ noLimit: true, limitSource: "you" });
+    expect(summarizeCredit([amex], { g: 10000 }).rate).toBe(0.07);
+  });
+  it("has no rate when every card is a charge card", () => {
+    expect(summarizeCredit([amex], {})).toMatchObject({ rate: null, missing: 0 });
+  });
+});

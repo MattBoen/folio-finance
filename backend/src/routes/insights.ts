@@ -93,7 +93,7 @@ router.get("/credit-use", requireAuth, async (c) => {
 router.put(
   "/credit-use",
   requireAuth,
-  zValidator("json", z.object({ limits: z.record(z.string().uuid(), z.number().min(0).max(10_000_000).nullable()) })),
+  zValidator("json", z.object({ limits: z.record(z.string().uuid(), z.union([z.number().min(0).max(10_000_000), z.literal("none")]).nullable()) })),
   async (c) => {
     const { userId } = c.get("auth");
     return c.json(await saveCreditLimits(userId, c.req.valid("json").limits));

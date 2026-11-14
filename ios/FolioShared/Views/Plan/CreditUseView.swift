@@ -19,7 +19,7 @@ struct CreditUseView: View {
                         if let use {
                             headline(use).entrance(0)
                             cardsCard(use).entrance(1)
-                            Text("Using under 30% of your limits generally helps your credit score. Paying a card down before its statement closes lowers what's reported.")
+                            Text("Using under 30% of your limits generally helps your credit score. Paying a card down before its statement closes lowers what's reported. Charge cards with no preset limit aren't counted, the same way current credit scores treat them.")
                                 .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
                                 .padding(.horizontal, 16).padding(.top, 4)
                             Text("General information based on your own data, not financial advice.")
@@ -36,7 +36,7 @@ struct CreditUseView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
             .sheet(item: $editing) { card in
-                CardLimitSheet(card: card) { limit in Task { await save(card.id, limit) } }
+                CardLimitSheet(card: card) { choice in Task { await save(card.id, choice) } }
             }
         }
         .task { await load() }
@@ -51,7 +51,9 @@ struct CreditUseView: View {
                     .font(.system(size: 38, weight: .bold, design: .rounded)).monospacedDigit()
                     .contentTransition(.numericText())
                     .sensitive()
-                CountingText(u.rate == nil ? "Add a card limit below to see this" : "\(money(u.balance)) of \(money(u.limit)) in card limits")
+                CountingText(u.rate == nil
+                             ? (u.missing > 0 ? "Add a card limit below to see this" : "Charge cards with no preset limit aren't counted")
+                             : "\(money(u.balance)) of \(money(u.limit)) in card limits")
                     .font(.footnote).foregroundStyle(.secondary).sensitive()
                 if let level {
                     let step = HealthMetric.credit.ladder[level]
@@ -92,16 +94,18 @@ struct CreditUseView: View {
                 HStack {
                     Text(c.name).font(.body).lineLimit(1)
                     Spacer(minLength: 8)
-                    CountingText(c.used.map { "\(Int(($0 * 100).rounded()))%" } ?? "Add limit")
+                    CountingText(c.noLimit ? "Not counted" : c.used.map { "\(Int(($0 * 100).rounded()))%" } ?? "Add limit")
                         .font(.subheadline.weight(.semibold)).monospacedDigit()
-                        .foregroundStyle(c.used == nil ? Color.accentColor : .primary)
+                        .foregroundStyle(c.noLimit ? Color.secondary : c.used == nil ? Color.accentColor : .primary)
                         .sensitive()
                 }
                 if let used = c.used {
                     ProgressBar(fraction: used, color: used > 0.30 ? .red : used > 0.10 ? .orange : .green)
                 }
-                CountingText(c.limit.map { "\(money(c.balance)) of \(money($0))" + (c.limitSource == "you" ? " · limit you entered" : "") }
-                             ?? "\(money(c.balance)) balance · your bank didn't send a limit")
+                CountingText(c.noLimit
+                             ? "\(money(c.balance)) balance · no preset limit (charge card)"
+                             : c.limit.map { "\(money(c.balance)) of \(money($0))" + (c.limitSource == "you" ? " · limit you entered" : "") }
+                                ?? "\(money(c.balance)) balance · your bank didn't send a limit")
                     .font(.caption).foregroundStyle(.secondary).sensitive()
             }
             Image(systemName: "chevron.right").font(.caption.weight(.bold)).foregroundStyle(.tertiary)
@@ -124,9 +128,9 @@ struct CreditUseView: View {
         }
     }
 
-    private func save(_ id: String, _ limit: Double?) async {
+    private func save(_ id: String, _ choice: Endpoint.CardLimit) async {
         do {
-            let u: CreditUse = try await auth.withFreshToken(.saveCreditLimit(id: id, limit: limit))
+            let u: CreditUse = try await auth.withFreshToken(.saveCreditLimit(id: id, choice))
             withAnimation(Motion.spring) { use = u }
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             NotificationCenter.default.post(name: .healthChanged, object: nil)
@@ -136,12 +140,13 @@ struct CreditUseView: View {
     }
 }
 
-/// Type a card's limit. "Use my bank's limit" clears yours.
+/// Set a card's limit, or say it has no preset limit (a charge card, left out of credit use).
 private struct CardLimitSheet: View {
     let card: CreditUse.Card
-    var onSave: (Double?) -> Void
+    var onSave: (Endpoint.CardLimit) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var text = ""
+    @State private var noLimit = false
     @FocusState private var focused: Bool
 
     private var value: Double? { Double(text.replacingOccurrences(of: ",", with: "")) }
@@ -150,15 +155,23 @@ private struct CardLimitSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    HStack {
-                        Text("$").foregroundStyle(.secondary)
-                        TextField("0", text: $text).keyboardType(.numberPad).focused($focused)
+                    Toggle("No preset limit", isOn: $noLimit.animation(Motion.spring))
+                        .tint(.green)
+                } footer: {
+                    Text("Charge cards like the Amex Green, Gold and Platinum have no preset limit. Current credit scores leave them out of credit use, so Folio does too.")
+                }
+                if !noLimit {
+                    Section {
+                        HStack {
+                            Text("$").foregroundStyle(.secondary)
+                            TextField("0", text: $text).keyboardType(.numberPad).focused($focused)
+                        }
+                    } header: { Text("Credit limit") } footer: {
+                        Text("It's on your card's statement or in its app. Folio uses it to work out how much of your credit you're using.")
                     }
-                } header: { Text("Credit limit") } footer: {
-                    Text("It's on your card's statement or in its app. Folio uses it to work out how much of your credit you're using.")
                 }
                 if card.limitSource == "you" {
-                    Section { Button("Use my bank's limit instead") { onSave(nil); dismiss() } }
+                    Section { Button("Go back to what my bank reports") { onSave(.bank); dismiss() } }
                 }
             }
             .navigationTitle(card.name)
@@ -166,15 +179,18 @@ private struct CardLimitSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button { onSave(value); dismiss() } label: { Text("Save").bold() }
-                        .disabled((value ?? 0) <= 0)
+                    Button {
+                        onSave(noLimit ? .noLimit : .amount(value ?? 0)); dismiss()
+                    } label: { Text("Save").bold() }
+                    .disabled(!noLimit && (value ?? 0) <= 0)
                 }
             }
             .onAppear {
+                noLimit = card.noLimit
                 if let l = card.limit { text = String(Int(l.rounded())) }
-                focused = true
+                if !noLimit { focused = true }
             }
         }
-        .presentationDetents([.medium])
+        .presentationDetents([.medium, .large])
     }
 }

@@ -89,8 +89,10 @@ struct CreditUse: Decodable, Sendable {
         let institution: String?
         let balance: Double
         let limit: Double?
-        let limitSource: String   // "bank" | "you" | "none"
+        let limitSource: String   // "bank" | "you" | "rules" | "none"
         let used: Double?
+        /// A charge card with no preset limit: left out of credit use, like current credit scores do.
+        let noLimit: Bool
     }
     let cards: [Card]
     let balance: Double
@@ -102,9 +104,25 @@ struct CreditUse: Decodable, Sendable {
 extension Endpoint {
     static var creditUse: Endpoint { .get("/insights/credit-use") }
 
-    /// Your limit for a card, or nil to go back to the bank's.
-    static func saveCreditLimit(id: String, limit: Double?) -> Endpoint {
-        struct Body: Encodable { let limits: [String: Double?] }
-        return .put("/insights/credit-use", body: Body(limits: [id: limit]))
+    enum CardLimit { case amount(Double), noLimit, bank }
+
+    /// Your limit for a card, "no preset limit" (a charge card), or back to what the bank reports.
+    static func saveCreditLimit(id: String, _ choice: CardLimit) -> Endpoint {
+        struct Body: Encodable {
+            let id: String; let choice: CardLimit
+            enum K: String, CodingKey { case limits }
+            struct Key: CodingKey { var stringValue: String; var intValue: Int? { nil }; init(stringValue: String) { self.stringValue = stringValue }; init?(intValue: Int) { nil } }
+            func encode(to encoder: Encoder) throws {
+                var c = encoder.container(keyedBy: K.self)
+                var m = c.nestedContainer(keyedBy: Key.self, forKey: .limits)
+                let k = Key(stringValue: id)
+                switch choice {
+                case .amount(let v): try m.encode(v, forKey: k)
+                case .noLimit: try m.encode("none", forKey: k)
+                case .bank: try m.encodeNil(forKey: k)
+                }
+            }
+        }
+        return .put("/insights/credit-use", body: Body(id: id, choice: choice))
     }
 }
