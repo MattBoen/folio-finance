@@ -38,7 +38,6 @@ struct EmergencyFundView: View {
                         if let error { ErrorBanner(message: error) { Task { await load() } } }
                         if let fund {
                             headline(fund).entrance(0)
-                            if let q = fund.question, !sorting { questionCard(q, fund).entrance(1) }
                             accountsCard(fund).entrance(1)
                             basisCard(fund).entrance(2)
                             footer(fund)
@@ -86,25 +85,6 @@ struct EmergencyFundView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    private func questionCard(_ q: EmergencyFund.Question, _ f: EmergencyFund) -> some View {
-        Card {
-            VStack(alignment: .leading, spacing: 12) {
-                Label(q.text, systemImage: "questionmark.bubble.fill")
-                    .font(.headline).foregroundStyle(.primary)
-                Text("Folio wasn't sure about this one.").font(.footnote).foregroundStyle(.secondary)
-                HStack(spacing: 10) {
-                    Button { Task { await set(q.accountId, true) } } label: {
-                        Text("Yes").font(.headline).frame(maxWidth: .infinity).frame(height: 30)
-                    }.buttonStyle(.borderedProminent)
-                    Button { Task { await set(q.accountId, false) } } label: {
-                        Text("No").font(.headline).frame(maxWidth: .infinity).frame(height: 30)
-                    }.buttonStyle(.bordered)
-                }
-                .controlSize(.large)
-            }
         }
     }
 
