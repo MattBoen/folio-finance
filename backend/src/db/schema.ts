@@ -201,6 +201,8 @@ export const userSettings = pgTable("user_settings", {
   // Savings rate's spending yardstick. Empty means "the same as the emergency fund".
   savingsBasis: text("savings_basis"),
   // Card limits you typed in, by account id, or "none" for a charge card with no preset limit.
+  // Which income streams count toward your usual monthly income, by stream key (your switches on the Income screen).
+  incomeIncluded: jsonb("income_included").$type<Record<string, boolean>>(),
   creditLimits: jsonb("credit_limits").$type<Record<string, number | "none">>(),
   emergencyPicks: jsonb("emergency_picks").$type<{ signature: string; at: string; by: "ai" | "rules"; picks: Record<string, { emergency: boolean; confident: boolean; reason: string }> }>(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

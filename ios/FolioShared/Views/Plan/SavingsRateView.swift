@@ -36,11 +36,7 @@ struct SavingsRateView: View {
             .navigationTitle("Savings rate")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
-            .sheet(isPresented: $editIncome) {
-                IncomeSheet(current: rate?.income ?? 0, isManual: rate?.incomeSource == "manual") {
-                    Task { await load(); changed() }
-                }
-            }
+            .sheet(isPresented: $editIncome, onDismiss: { Task { await load() } }) { IncomeView() }
         }
         .task { await load() }
     }

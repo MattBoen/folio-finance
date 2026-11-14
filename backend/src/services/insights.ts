@@ -10,6 +10,7 @@ export interface InTxn {
   isExcluded: boolean;
   isPending: boolean;
   accountType: string;     // depository | credit | loan | investment | other
+  accountName?: string;
 }
 
 export interface InAcct {
@@ -43,7 +44,7 @@ export function daysBetween(a: string, b: string): number {
 export function isoDay(t: number): string {
   return new Date(t).toISOString().slice(0, 10);
 }
-function addDays(d: string, n: number): string { return isoDay(toTime(d) + n * DAY); }
+export function addDays(d: string, n: number): string { return isoDay(toTime(d) + n * DAY); }
 function monthKey(d: string): string { return d.slice(0, 7); }
 
 export function median(xs: number[]): number {

@@ -2,7 +2,8 @@ import { and, eq, gte, isNull, lt } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { accounts, budgets, plaidItems, transactions, userSettings } from "../db/schema.js";
 import { askModel, costOf, type Usage } from "./ask-cost.js";
-import { computeOutflow, detectIncome, isoDay } from "./insights.js";
+import { computeOutflow, isoDay } from "./insights.js";
+import { getIncome } from "./income-sources.js";
 import { loadInsightInputs, todayIso } from "./insight-data.js";
 
 /**
@@ -219,7 +220,8 @@ export function savingsSummary(income: { monthly: number; source: string }, mont
 export async function getSavingsRate(userId: string) {
   const c = await loadContext(userId);
   const fund = fundFrom(c);
-  const income = detectIncome(c.txns, c.now, c.incomeOverride);
+  const inc = await getIncome(userId);
+  const income = { monthly: inc.monthly, source: inc.source };
   const own = BASES.includes(c.settings?.savingsBasis as Basis) ? (c.settings!.savingsBasis as Basis) : null;
   return savingsSummary(income, c.monthly, fund.basis, own);
 }

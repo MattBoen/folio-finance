@@ -126,3 +126,39 @@ extension Endpoint {
         return .put("/insights/credit-use", body: Body(id: id, choice: choice))
     }
 }
+
+/// Income, sorted the way tax forms sort it, with a switch per stream for whether it counts toward your usual month.
+struct IncomeStreams: Decodable, Sendable {
+    struct Stream: Decodable, Identifiable, Sendable {
+        let key: String
+        let name: String
+        let kind: String
+        let kindLabel: String
+        let taxForm: String?
+        let account: String?
+        let count: Int
+        let lastDate: String
+        let last12: Double
+        let ytd: Double
+        let monthly: Double
+        var included: Bool
+        var source: String       // "rules" | "you"
+        var id: String { key }
+    }
+    let monthly: Double
+    let detected: Double
+    let source: String           // "detected" | "manual" | "none"
+    let ytd: Double
+    let months: Double
+    var streams: [Stream]
+}
+
+extension Endpoint {
+    static var income: Endpoint { .get("/insights/income") }
+
+    /// Whether a stream counts toward your usual monthly income.
+    static func saveIncomeStream(key: String, included: Bool) -> Endpoint {
+        struct Body: Encodable { let included: [String: Bool] }
+        return .put("/insights/income", body: Body(included: [key: included]))
+    }
+}

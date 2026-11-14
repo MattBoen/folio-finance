@@ -57,7 +57,7 @@ struct PlanView: View {
             .environment(\.zoomNamespace, zoom)
             .sheet(item: $sheet) { kind in sheetContent(kind).zoomed(from: kind.id, in: zoom) }
             .sheet(isPresented: $showIncome) {
-                IncomeSheet(current: insights?.income.monthly ?? 0, isManual: insights?.income.source == "manual") { NotificationCenter.default.post(name: .healthChanged, object: nil) }
+                IncomeView()
             }
     }
 
@@ -67,7 +67,7 @@ struct PlanView: View {
         if let insights {
             switch kind {
             case .income:
-                IncomeBreakdown(insights: insights) { handOff { showIncome = true } }
+                IncomeView()
             case .spending:
                 SpendingPatternBreakdown(insights: insights)
             case .health(let metric):

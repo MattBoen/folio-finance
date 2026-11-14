@@ -25,6 +25,7 @@ export async function loadInsightInputs(userId: string, now: string, lookbackDay
       isExcluded: transactions.isExcluded,
       isPending: transactions.isPending,
       accountType: accounts.type,
+      accountName: accounts.name,
     })
     .from(transactions)
     .innerJoin(accounts, eq(transactions.accountId, accounts.id))
@@ -47,6 +48,7 @@ export async function loadInsightInputs(userId: string, now: string, lookbackDay
     isExcluded: r.isExcluded,
     isPending: r.isPending,
     accountType: r.accountType,
+    accountName: r.accountName,
   }));
 
   const acctRows = await db

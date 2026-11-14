@@ -7,6 +7,7 @@ import { summarizeHoldings } from "../services/holdings.js";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { getCreditUse, saveCreditLimits } from "../services/credit-use.js";
+import { getIncome, saveIncomeIncluded } from "../services/income-sources.js";
 import { BASES, getEmergencyFund, getSavingsRate, saveEmergencyFund, saveSavingsRate } from "../services/emergency-fund.js";
 
 const router = new Hono();
@@ -14,6 +15,13 @@ const router = new Hono();
 router.get("/", requireAuth, async (c) => {
   const { userId } = c.get("auth");
   const insights = await computeInsightsForUser(userId);
+  // Income comes from the Income screen's streams (what's switched on), unless you typed your own number.
+  const inc = await getIncome(userId).catch(() => null);
+  if (inc && insights.income.source !== "manual") {
+    insights.income.monthly = inc.monthly;
+    insights.income.source = inc.source as typeof insights.income.source;
+    insights.income.sources = inc.streams.filter((s) => s.included).map((s) => ({ name: s.name, monthly: s.monthly, frequency: s.kind === "wages" ? "biweekly" : "irregular" }));
+  }
   // The emergency fund tile uses the same accounts and yardstick as its own screen (your choices, then Folio's).
   const ef = await getEmergencyFund(userId).catch(() => null);
   if (ef) {
@@ -81,6 +89,22 @@ router.put(
   async (c) => {
     const { userId } = c.get("auth");
     return c.json(await saveSavingsRate(userId, c.req.valid("json").basis as Parameters<typeof saveSavingsRate>[1]));
+  }
+);
+
+// Income: every kind of money coming in, sorted like your tax forms, with switches for what counts.
+router.get("/income", requireAuth, async (c) => {
+  const { userId } = c.get("auth");
+  return c.json(await getIncome(userId));
+});
+
+router.put(
+  "/income",
+  requireAuth,
+  zValidator("json", z.object({ included: z.record(z.string().max(200), z.boolean().nullable()) })),
+  async (c) => {
+    const { userId } = c.get("auth");
+    return c.json(await saveIncomeIncluded(userId, c.req.valid("json").included));
   }
 );
 

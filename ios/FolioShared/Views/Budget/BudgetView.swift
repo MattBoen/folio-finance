@@ -232,8 +232,12 @@ struct SpendingView: View {
         .padding(.horizontal, 4)
     }
 
+    /// Excluded purchases, as one gray slice on the wheel. Shown so you can see them, never counted in "Spent".
+    private var excludedTotal: Double { excludedRows.reduce(0) { $0 + $1.doubleAmount } }
+    private static let excludedID = "Excluded"
+
     private var donutCard: some View {
-        let list = slices
+        let list = slices + (excludedTotal > 0 ? [Slice(id: Self.excludedID, value: excludedTotal, color: Color.gray.opacity(0.45), symbol: "eye.slash")] : [])
         let total = max(spent, 0.01)
         let focus = list.first { $0.id == selected }
         return Card {
@@ -272,11 +276,18 @@ struct SpendingView: View {
                             .font(.system(size: 30, weight: .bold, design: .rounded)).monospacedDigit()
                             .sensitive()
                         if let focus {
-                            Text("\(Int((focus.value / total * 100).rounded()))% of spending")
+                            Text(focus.id == Self.excludedID ? "not counted" : "\(Int((focus.value / total * 100).rounded()))% of spending")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
                     .animation(.snappy, value: selected)
+                }
+                if focus == nil, excludedTotal > 0 {
+                    HStack(spacing: 6) {
+                        Circle().fill(Color.gray.opacity(0.45)).frame(width: 8, height: 8)
+                        CountingText("\(money(excludedTotal)) excluded, not counted in Spent")
+                            .font(.caption).foregroundStyle(.secondary).sensitive()
+                    }
                 }
                 if focus == nil, previousSpent > 0 {
                     let change = (spent - previousSpent) / previousSpent
