@@ -80,3 +80,31 @@ extension Endpoint {
         return .put("/insights/savings-rate", body: Body(basis: basis))
     }
 }
+
+/// Credit use: card balances ÷ card limits. The limit is the bank's, or one you typed in (yours wins).
+struct CreditUse: Decodable, Sendable {
+    struct Card: Decodable, Identifiable, Sendable {
+        let id: String
+        let name: String
+        let institution: String?
+        let balance: Double
+        let limit: Double?
+        let limitSource: String   // "bank" | "you" | "none"
+        let used: Double?
+    }
+    let cards: [Card]
+    let balance: Double
+    let limit: Double
+    let rate: Double?
+    let missing: Int
+}
+
+extension Endpoint {
+    static var creditUse: Endpoint { .get("/insights/credit-use") }
+
+    /// Your limit for a card, or nil to go back to the bank's.
+    static func saveCreditLimit(id: String, limit: Double?) -> Endpoint {
+        struct Body: Encodable { let limits: [String: Double?] }
+        return .put("/insights/credit-use", body: Body(limits: [id: limit]))
+    }
+}

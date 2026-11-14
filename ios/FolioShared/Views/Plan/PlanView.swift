@@ -75,6 +75,7 @@ struct PlanView: View {
                 // Emergency fund and savings rate have their own editable screens.
                 if metric == .emergency { EmergencyFundView() }
                 else if metric == .savings { SavingsRateView() }
+                else if metric == .credit { CreditUseView() }
                 else { HealthBreakdown(metric: metric, insights: insights, hasAge: ageEntered > 0) }
             }
         }
