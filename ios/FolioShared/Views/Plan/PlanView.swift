@@ -356,6 +356,16 @@ struct EditBudgetSheet: View {
         Categories.choices.filter { c in c != "Income" && !rows.contains { $0.category == c } }
     }
     private var total: Double { rows.reduce(0) { $0 + (Double($1.amount) ?? 0) } }
+    @State private var redone = false
+
+    /// Swaps in Folio's draft from your recent spending. Only saved if you tap Save.
+    private func redo() {
+        withAnimation(Motion.spring) {
+            rows = suggestions.map { Row(category: $0.category, amount: String(Int($0.amount.rounded()))) }
+            redone = true
+        }
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+    }
 
     var body: some View {
         NavigationStack {
@@ -383,6 +393,19 @@ struct EditBudgetSheet: View {
                                 }
                             }
                         } label: { Label("Add a category", systemImage: "plus.circle.fill") }
+                    }
+                }
+                if !suggestions.isEmpty {
+                    Section {
+                        Button { redo() } label: {
+                            Label(redone ? "Folio redid it" : "Have Folio redo it", systemImage: redone ? "checkmark.circle.fill" : "wand.and.stars")
+                                .contentTransition(.symbolEffect(.replace))
+                        }
+                        .disabled(redone)
+                    } footer: {
+                        Text(redone
+                             ? "Folio's draft is filled in above. Change anything you like, then tap Save. Cancel keeps your old budget."
+                             : "Folio rebuilds every target from what you've actually spent over the last few months. Nothing changes until you tap Save.")
                     }
                 }
                 if let error { Section { Text(error).foregroundStyle(.red).font(.footnote) } }
