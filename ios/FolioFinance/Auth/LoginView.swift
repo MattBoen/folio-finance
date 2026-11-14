@@ -6,6 +6,7 @@ struct LoginView: View {
     @State private var email = ""
     @State private var password = ""
     @State private var slow = false
+    @State private var showForgot = false
     @FocusState private var focus: Field?
 
     private enum Field { case email, password }
@@ -61,6 +62,12 @@ struct LoginView: View {
                                 .padding(.horizontal, 6)
                         }
 
+                        HStack {
+                            Spacer()
+                            Button("Forgot password?") { showForgot = true }.font(.footnote.weight(.semibold))
+                        }
+                        .padding(.horizontal, 6)
+
                         Button(action: submit) {
                             Group {
                                 if auth.isLoading {
@@ -95,7 +102,7 @@ struct LoginView: View {
                     }
                     .padding(.horizontal, 20)
 
-                    Text("New here? Just enter your email and a password. We'll set up your account.\nBy continuing you agree to our [Privacy Policy](\(AppLinks.privacy.absoluteString)).")
+                    Text("New here? Just enter your email and a password. We'll set up your account.\nFree for 7 days, then $74.99 a year or $10.49 a month. Cancel any time in Settings.\nBy continuing you agree to our [Terms](\(AppLinks.terms.absoluteString)) and [Privacy Policy](\(AppLinks.privacy.absoluteString)).")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -111,6 +118,7 @@ struct LoginView: View {
                 if !Task.isCancelled { slow = true }
             }
         }
+        .sheet(isPresented: $showForgot) { ForgotPasswordView(email: email) }
         .confirmationDialog(
             "Create your Folio account?",
             isPresented: Binding(get: { auth.pendingNewAccount != nil }, set: { if !$0 { auth.pendingNewAccount = nil } }),

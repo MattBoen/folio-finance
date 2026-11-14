@@ -84,6 +84,20 @@ final class AuthManager: ObservableObject {
         await register(email: email, password: password)
     }
 
+    /// Asks the server to email a 6-digit code. It answers the same whether or not the address has an account.
+    func requestResetCode(email: String) async throws {
+        struct Ok: Decodable { let ok: Bool }
+        let _: Ok = try await api.request(.forgotPassword(email: Self.normalized(email)))
+    }
+
+    /// Checks the emailed code, sets the new password and signs in.
+    func resetPassword(email: String, code: String, password: String) async throws {
+        let email = Self.normalized(email)
+        let response: AuthResponse = try await api.request(.resetPassword(email: email, code: code, password: password))
+        UserDefaults.standard.set(email, forKey: "currentEmail")
+        store(response)
+    }
+
     private func signIn(email: String, password: String) async throws {
         do {
             let response: AuthResponse = try await api.request(.login(email: email, password: password))
@@ -262,10 +276,23 @@ enum DemoData {
         }
         let path = endpoint.path
         let object: Any
-        if path.hasPrefix("/accounts/net-worth/history") {
+        if path.hasPrefix("/accounts/"), path.contains("/history"), !path.hasPrefix("/accounts/net-worth") {
+            // Sample curve for one investment account: the portfolio's curve scaled to that account's share.
+            let id = path.dropFirst("/accounts/".count).prefix { $0 != "/" }
+            let balance = Double((accounts.first { ($0["id"] as? String) == String(id) }?["balance_current"] as? String) ?? "") ?? 0
+            let rows = history(days: Int(query(path)["days"] ?? "") ?? 365).compactMap { r -> [String: Any]? in
+                guard let d = r["date"], let inv = Double(r["invested"] as? String ?? "") else { return nil }
+                return ["date": d, "value": String(format: "%.2f", inv / 103_790.95 * balance)]
+            }
+            object = ["snapshots": rows]
+        } else if path.hasPrefix("/accounts/net-worth/history") {
             object = ["snapshots": history(days: Int(query(path)["days"] ?? "") ?? 90)]
         } else if path == "/accounts" {
             object = ["accounts": accounts]
+        } else if path == "/insights/holdings" {
+            object = holdings
+        } else if path == "/insights/recurring" {
+            object = recurring
         } else if path == "/insights" {
             object = insights
         } else if path == "/budgets" {
@@ -285,6 +312,50 @@ enum DemoData {
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         return try decoder.decode(T.self, from: data)
     }
+
+    /// Bills for the sample data, dated around today so "Coming up" always has something in it.
+    private static var recurring: [String: Any] {
+        func ahead(_ d: Int) -> String { dayString(Date().addingTimeInterval(Double(d) * 86_400)) }
+        func back(_ d: Int) -> String { dayString(Date().addingTimeInterval(-Double(d) * 86_400)) }
+        func item(_ id: String, _ name: String, _ amount: Double, _ cat: String, sub: Bool, next: Int, estimated: Bool = false, change: [String: Double]? = nil) -> [String: Any] {
+            var d: [String: Any] = ["id": id, "name": name, "amount": amount, "frequency": "monthly", "monthly": amount, "yearly": amount * 12,
+                                    "lastDate": back(30 - next), "nextDate": ahead(next), "category": cat, "isSubscription": sub, "estimated": estimated, "count": 8]
+            if let change { d["priceChange"] = change }
+            return d
+        }
+        let items: [[String: Any]] = [
+            item("rent", "Rent", 1850, "Home", sub: false, next: 24),
+            item("car insurance", "Car Insurance", 142, "Bills & Utilities", sub: false, next: 11),
+            item("verizon", "Verizon", 85, "Bills & Utilities", sub: false, next: 8),
+            item("xcel energy", "Xcel Energy", 118, "Bills & Utilities", sub: false, next: 15, estimated: true),
+            item("gym", "Anytime Fitness", 39.99, "Health", sub: true, next: 3),
+            item("netflix", "Netflix", 15.49, "Subscriptions", sub: true, next: 5),
+            item("spotify", "Spotify", 11.99, "Subscriptions", sub: true, next: 19, change: ["from": 10.99, "to": 11.99]),
+            item("icloud", "iCloud+", 2.99, "Subscriptions", sub: true, next: 13),
+        ]
+        let upcoming: [[String: Any]] = items.map { ["id": $0["id"]!, "name": $0["name"]!, "amount": $0["amount"]!, "date": $0["nextDate"]!, "estimated": $0["estimated"]!] }
+            .sorted { ($0["date"] as! String) < ($1["date"] as! String) }
+        let monthly = items.reduce(0.0) { $0 + ($1["monthly"] as! Double) }
+        let subs = items.filter { $0["isSubscription"] as! Bool }.reduce(0.0) { $0 + ($1["monthly"] as! Double) }
+        return ["items": items, "monthlyTotal": monthly, "yearlyTotal": monthly * 12, "subscriptionsMonthly": subs, "upcoming": upcoming,
+                "dueNext30": monthly - 0, "dueThisMonth": 640.0]
+    }
+
+    private static let holdings: [String: Any] = {
+        func h(_ acct: String, _ t: String?, _ name: String, _ kind: String, _ q: Double, _ price: Double, _ cost: Double?) -> [String: Any] {
+            let v = (q * price * 100).rounded() / 100
+            var d: [String: Any] = ["accountId": acct, "name": name, "kind": kind, "quantity": q, "price": price, "value": v, "weight": (v / 103_790.95 * 10_000).rounded() / 100]
+            if let t { d["ticker"] = t }
+            if let cost { let g = v - cost; d["gain"] = g.rounded(); d["gainPercent"] = (g / cost * 10_000).rounded() / 100 }
+            return d
+        }
+        let rows = [h("demo-401k", "VTI", "Vanguard Total Stock Market ETF", "etf", 140, 287.4, 31_200), h("demo-brokerage", "VOO", "Vanguard S&P 500 ETF", "etf", 48, 531.8, 21_900),
+                    h("demo-401k", "VXUS", "Vanguard Total International Stock ETF", "etf", 210, 66.2, 12_400), h("demo-brokerage", "AAPL", "Apple Inc.", "equity", 52, 231.5, 9_100),
+                    h("demo-401k", "BND", "Vanguard Total Bond Market ETF", "etf", 110, 72.9, 8_300), h("demo-brokerage", "MSFT", "Microsoft Corp.", "equity", 14, 421.3, 5_200),
+                    h("demo-brokerage", nil, "Cash", "cash", 2_410, 1, nil)]
+        return ["holdings": rows, "total": 103_790.95, "gain": 7_390.0, "gainPercent": 7.9, "coveredValue": 101_380.0,
+                "byKind": [["kind": "ETFs", "value": 85_990.0, "percent": 82.8], ["kind": "Stocks", "value": 15_450.0, "percent": 14.9], ["kind": "Cash", "value": 2_410.0, "percent": 2.3]]]
+    }()
 
     private static let insights: [String: Any] = [
         "income": ["monthly": 6300, "source": "detected", "confidence": "high",

@@ -23,6 +23,7 @@ struct FolioFinanceApp: App {
             }
             .environmentObject(authManager)
             .environmentObject(billing)
+            .appAppearance()
             .onChange(of: scenePhase) { _, phase in
                 // Coming back from the browser after paying: pick up the new subscription.
                 if phase == .active { Task { await billing.refresh(authManager) } }
@@ -31,7 +32,7 @@ struct FolioFinanceApp: App {
             .task {
                 await billing.refresh(authManager)
                 #if DEBUG
-                if ProcessInfo.processInfo.arguments.contains("-showOnboarding") { authManager.startDemo() }
+                if ProcessInfo.processInfo.arguments.contains("-showOnboarding") || ProcessInfo.processInfo.arguments.contains("-showBills") { authManager.startDemo() }
                 #endif
                 await APIClient.shared.warmUp()
             }

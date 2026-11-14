@@ -32,6 +32,7 @@ struct PaywallContent: View {
                     }
 
                     VStack(alignment: .leading, spacing: 14) {
+                        perk("calendar.badge.clock", .orange, "Bills and subscriptions, found for you", "See what's due next and what your subscriptions cost a year.")
                         perk("link", .blue, "Every account in one place", "Banks, cards, investments, loans and your car.")
                         perk("chart.line.uptrend.xyaxis", .green, "Net worth and spending that update themselves", "No spreadsheets, no manual entry.")
                         perk("sparkles", .indigo, "Ask Folio", "Ask about your money, build a budget, and make changes in plain words.")

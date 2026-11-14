@@ -35,9 +35,15 @@ struct RootView: View {
     @EnvironmentObject private var auth: AuthManager
     @EnvironmentObject private var billing: BillingManager
     @State private var showSetup = false
+    #if DEBUG
+    @State private var debugBills = ProcessInfo.processInfo.arguments.contains("-showBills")
+    #endif
 
     var body: some View {
         MainTabView()
+            #if DEBUG
+            .fullScreenCover(isPresented: $debugBills) { NavigationStack { BillsView() }.environmentObject(auth) }
+            #endif
             .fullScreenCover(isPresented: Binding(get: { billing.locked && !showSetup }, set: { _ in })) {
                 PaywallGate()
             }

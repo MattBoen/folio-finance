@@ -3,51 +3,28 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 60;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AA00000000000000000F0032 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AA00000000000000000F0031 /* PrivacyInfo.xcprivacy */; };
+		AA00000000000000000F0012 /* ForgotPasswordView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000000000000000F0011 /* ForgotPasswordView.swift */; };
 		14BDA2F1FF89026E7568305C /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 58258D68C3BF9B6BF5F45995 /* Foundation.framework */; };
 		20BAC7B40D595591BCDAAEA7 /* FolioWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41E774D9A553AA31181E7193 /* FolioWidgets.swift */; };
-		32B0BE3F0831ED0599E3D393 /* WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 803263EA63F9DF978A85041C /* WidgetSnapshot.swift */; };
 		37AE682E03B5017F5D1EE300 /* PaywallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 680920E13CA4AC98D2B5AF15 /* PaywallView.swift */; };
 		3BA7E5F77B8043A3E8AACE12 /* FolioWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E186547C3473C27CA4F71538 /* FolioWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		65BB346EAF6A169CC41F67A6 /* Motion.swift in Sources */ = {isa = PBXBuildFile; fileRef = E321F9B99F432A14479E3FF0 /* Motion.swift */; };
 		8660647869185EB6CB5D0027 /* BillingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D298E2582E3D6DDF81C2110A /* BillingManager.swift */; };
 		992D2A2A6B5789DA3116E58B /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 638AD0F354906F476427E6AC /* SettingsView.swift */; };
-		A1CB8BD672669AFC2B600B15 /* WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 803263EA63F9DF978A85041C /* WidgetSnapshot.swift */; };
 		AA0000000000000000000020 /* FolioFinanceApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000010 /* FolioFinanceApp.swift */; };
 		AA0000000000000000000021 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000011 /* APIClient.swift */; };
-		AA0000000000000000000022 /* Endpoints.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000012 /* Endpoints.swift */; };
 		AA0000000000000000000023 /* AuthManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000013 /* AuthManager.swift */; };
 		AA0000000000000000000024 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000014 /* KeychainService.swift */; };
 		AA0000000000000000000025 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000015 /* LoginView.swift */; };
 		AA0000000000000000000026 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000016 /* MainTabView.swift */; };
-		AA0000000000000000000027 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000002F /* Theme.swift */; };
-		AA0000000000000000000028 /* OverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000017 /* OverviewView.swift */; };
-		AA0000000000000000000029 /* AccountsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000018 /* AccountsView.swift */; };
-		AA000000000000000000002A /* TransactionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000019 /* TransactionsView.swift */; };
-		AA000000000000000000002B /* BudgetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000001A /* BudgetView.swift */; };
-		AA000000000000000000002C /* Account.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000001B /* Account.swift */; };
-		AA000000000000000000002D /* Transaction.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000001C /* Transaction.swift */; };
-		AA000000000000000000002E /* PlaidItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000001D /* PlaidItem.swift */; };
 		AA0000000000000000000030 /* PlaidLinkSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000001E /* PlaidLinkSheet.swift */; };
 		AA0000000000000000000031 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000001F /* Assets.xcassets */; };
-		AA0000000000000000000103 /* PlanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000102 /* PlanView.swift */; };
-		AA0000000000000000000105 /* Insights.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000104 /* Insights.swift */; };
 		AA0000000000000000000108 /* OnboardingFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000107 /* OnboardingFlow.swift */; };
-		AA000000000000000000010B /* CarEntryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000010A /* CarEntryView.swift */; };
-		AA000000000000000000010D /* TransactionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000010C /* TransactionDetailView.swift */; };
-		AA0000000000000000000110 /* BreakdownSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000010F /* BreakdownSheet.swift */; };
-		AA0000000000000000000112 /* SummarySheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000111 /* SummarySheets.swift */; };
-		AA0000000000000000000114 /* PlanSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000113 /* PlanSheets.swift */; };
-		AA0000000000000000000117 /* MoneyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000116 /* MoneyView.swift */; };
-		AA000000000000000000011A /* AskView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000119 /* AskView.swift */; };
-		AA000000000000000000011C /* AskModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000011B /* AskModels.swift */; };
-		AA000000000000000000011F /* SpendingHostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000011E /* SpendingHostView.swift */; };
-		AA0000000000000000000122 /* InvestingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000121 /* InvestingView.swift */; };
 		AC0D1F5A3091270D0066B739 /* LinkKit in Frameworks */ = {isa = PBXBuildFile; productRef = AC0D1F593091270D0066B739 /* LinkKit */; };
-		D3F6146D191C97FA4CC6EE7D /* EditVehicleSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1DB00C7B292CDFAE57AB0B9 /* EditVehicleSheet.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -75,50 +52,41 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		AA00000000000000000F0031 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		AA00000000000000000F0011 /* ForgotPasswordView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgotPasswordView.swift; sourceTree = "<group>"; };
 		41E774D9A553AA31181E7193 /* FolioWidgets.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FolioWidgets.swift; sourceTree = "<group>"; };
 		58258D68C3BF9B6BF5F45995 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		638AD0F354906F476427E6AC /* SettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		680920E13CA4AC98D2B5AF15 /* PaywallView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PaywallView.swift; sourceTree = "<group>"; };
-		803263EA63F9DF978A85041C /* WidgetSnapshot.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WidgetSnapshot.swift; sourceTree = "<group>"; };
 		87A5069034F52FF62A087482 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		91EBDF72A50B987F6D55A772 /* FolioFinance.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = FolioFinance.entitlements; sourceTree = "<group>"; };
-		A1DB00C7B292CDFAE57AB0B9 /* EditVehicleSheet.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EditVehicleSheet.swift; sourceTree = "<group>"; };
 		AA000000000000000000000E /* FolioFinance.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FolioFinance.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000010 /* FolioFinanceApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolioFinanceApp.swift; sourceTree = "<group>"; };
 		AA0000000000000000000011 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
-		AA0000000000000000000012 /* Endpoints.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Endpoints.swift; sourceTree = "<group>"; };
 		AA0000000000000000000013 /* AuthManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthManager.swift; sourceTree = "<group>"; };
 		AA0000000000000000000014 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
 		AA0000000000000000000015 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		AA0000000000000000000016 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
-		AA0000000000000000000017 /* OverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverviewView.swift; sourceTree = "<group>"; };
-		AA0000000000000000000018 /* AccountsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountsView.swift; sourceTree = "<group>"; };
-		AA0000000000000000000019 /* TransactionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionsView.swift; sourceTree = "<group>"; };
-		AA000000000000000000001A /* BudgetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BudgetView.swift; sourceTree = "<group>"; };
-		AA000000000000000000001B /* Account.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Account.swift; sourceTree = "<group>"; };
-		AA000000000000000000001C /* Transaction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Transaction.swift; sourceTree = "<group>"; };
-		AA000000000000000000001D /* PlaidItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaidItem.swift; sourceTree = "<group>"; };
 		AA000000000000000000001E /* PlaidLinkSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaidLinkSheet.swift; sourceTree = "<group>"; };
 		AA000000000000000000001F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		AA000000000000000000002F /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
-		AA0000000000000000000102 /* PlanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanView.swift; sourceTree = "<group>"; };
-		AA0000000000000000000104 /* Insights.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Insights.swift; sourceTree = "<group>"; };
 		AA0000000000000000000107 /* OnboardingFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFlow.swift; sourceTree = "<group>"; };
-		AA000000000000000000010A /* CarEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarEntryView.swift; sourceTree = "<group>"; };
-		AA000000000000000000010C /* TransactionDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionDetailView.swift; sourceTree = "<group>"; };
-		AA000000000000000000010F /* BreakdownSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BreakdownSheet.swift; sourceTree = "<group>"; };
-		AA0000000000000000000111 /* SummarySheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SummarySheets.swift; sourceTree = "<group>"; };
-		AA0000000000000000000113 /* PlanSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanSheets.swift; sourceTree = "<group>"; };
-		AA0000000000000000000116 /* MoneyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoneyView.swift; sourceTree = "<group>"; };
-		AA0000000000000000000119 /* AskView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskView.swift; sourceTree = "<group>"; };
-		AA000000000000000000011B /* AskModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskModels.swift; sourceTree = "<group>"; };
-		AA000000000000000000011E /* SpendingHostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpendingHostView.swift; sourceTree = "<group>"; };
-		AA0000000000000000000121 /* InvestingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvestingView.swift; sourceTree = "<group>"; };
 		C330286129F2BC5A0C4C2ACA /* FolioWidgets.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = FolioWidgets.entitlements; sourceTree = "<group>"; };
 		D298E2582E3D6DDF81C2110A /* BillingManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BillingManager.swift; sourceTree = "<group>"; };
 		E186547C3473C27CA4F71538 /* FolioWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = FolioWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-		E321F9B99F432A14479E3FF0 /* Motion.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Motion.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		FD5A4ED0000000000000A001 /* FolioShared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = FolioShared;
+			sourceTree = "<group>";
+		};
+		FD5A4ED0000000000000A002 /* FolioWidgetShared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = FolioWidgetShared;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		522554220947933DEAB8749B /* Frameworks */ = {
@@ -140,15 +108,6 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		0130D59C686BE300D343593D /* Shared */ = {
-			isa = PBXGroup;
-			children = (
-				803263EA63F9DF978A85041C /* WidgetSnapshot.swift */,
-			);
-			name = Shared;
-			path = Shared;
-			sourceTree = "<group>";
-		};
 		4E2A0775732F68BCB93C113D /* Settings */ = {
 			isa = PBXGroup;
 			children = (
@@ -189,6 +148,8 @@
 			isa = PBXGroup;
 			children = (
 				AA000000000000000000000F /* FolioFinance */,
+				FD5A4ED0000000000000A001 /* FolioShared */,
+				FD5A4ED0000000000000A002 /* FolioWidgetShared */,
 				AA000000000000000000000D /* Products */,
 				59583ABB60274523A6B59F6E /* Frameworks */,
 				56FADE518003226196B649BC /* FolioWidgets */,
@@ -210,10 +171,8 @@
 				AA0000000000000000000010 /* FolioFinanceApp.swift */,
 				AA0000000000000000000032 /* Networking */,
 				AA0000000000000000000033 /* Auth */,
-				AA0000000000000000000034 /* Models */,
 				AA0000000000000000000035 /* Views */,
 				AA0000000000000000000036 /* Resources */,
-				0130D59C686BE300D343593D /* Shared */,
 				91EBDF72A50B987F6D55A772 /* FolioFinance.entitlements */,
 			);
 			path = FolioFinance;
@@ -223,7 +182,6 @@
 			isa = PBXGroup;
 			children = (
 				AA0000000000000000000011 /* APIClient.swift */,
-				AA0000000000000000000012 /* Endpoints.swift */,
 			);
 			path = Networking;
 			sourceTree = "<group>";
@@ -234,40 +192,17 @@
 				AA0000000000000000000013 /* AuthManager.swift */,
 				AA0000000000000000000014 /* KeychainService.swift */,
 				AA0000000000000000000015 /* LoginView.swift */,
+				AA00000000000000000F0011 /* ForgotPasswordView.swift */,
 			);
 			path = Auth;
-			sourceTree = "<group>";
-		};
-		AA0000000000000000000034 /* Models */ = {
-			isa = PBXGroup;
-			children = (
-				AA0000000000000000000104 /* Insights.swift */,
-				AA000000000000000000001B /* Account.swift */,
-				AA000000000000000000001C /* Transaction.swift */,
-				AA000000000000000000001D /* PlaidItem.swift */,
-			);
-			path = Models;
 			sourceTree = "<group>";
 		};
 		AA0000000000000000000035 /* Views */ = {
 			isa = PBXGroup;
 			children = (
-				AA0000000000000000000120 /* Investing */,
-				AA000000000000000000011D /* Spending */,
-				AA0000000000000000000118 /* Ask */,
-				AA0000000000000000000115 /* Money */,
-				AA000000000000000000010E /* Components */,
-				AA0000000000000000000109 /* Vehicle */,
 				AA0000000000000000000106 /* Onboarding */,
-				AA0000000000000000000101 /* Plan */,
-				AA000000000000000000002F /* Theme.swift */,
 				AA0000000000000000000016 /* MainTabView.swift */,
-				AA0000000000000000000038 /* Overview */,
-				AA0000000000000000000039 /* Accounts */,
-				AA000000000000000000003A /* Transactions */,
-				AA000000000000000000003B /* Budget */,
 				AA000000000000000000003C /* Plaid */,
-				E321F9B99F432A14479E3FF0 /* Motion.swift */,
 				4E2A0775732F68BCB93C113D /* Settings */,
 				C786EA723E019294E6D5B58F /* Billing */,
 			);
@@ -278,42 +213,9 @@
 			isa = PBXGroup;
 			children = (
 				AA000000000000000000001F /* Assets.xcassets */,
+				AA00000000000000000F0031 /* PrivacyInfo.xcprivacy */,
 			);
 			path = Resources;
-			sourceTree = "<group>";
-		};
-		AA0000000000000000000038 /* Overview */ = {
-			isa = PBXGroup;
-			children = (
-				AA0000000000000000000111 /* SummarySheets.swift */,
-				AA0000000000000000000017 /* OverviewView.swift */,
-			);
-			path = Overview;
-			sourceTree = "<group>";
-		};
-		AA0000000000000000000039 /* Accounts */ = {
-			isa = PBXGroup;
-			children = (
-				AA0000000000000000000018 /* AccountsView.swift */,
-			);
-			path = Accounts;
-			sourceTree = "<group>";
-		};
-		AA000000000000000000003A /* Transactions */ = {
-			isa = PBXGroup;
-			children = (
-				AA000000000000000000010C /* TransactionDetailView.swift */,
-				AA0000000000000000000019 /* TransactionsView.swift */,
-			);
-			path = Transactions;
-			sourceTree = "<group>";
-		};
-		AA000000000000000000003B /* Budget */ = {
-			isa = PBXGroup;
-			children = (
-				AA000000000000000000001A /* BudgetView.swift */,
-			);
-			path = Budget;
 			sourceTree = "<group>";
 		};
 		AA000000000000000000003C /* Plaid */ = {
@@ -324,71 +226,12 @@
 			path = Plaid;
 			sourceTree = "<group>";
 		};
-		AA0000000000000000000101 /* Plan */ = {
-			isa = PBXGroup;
-			children = (
-				AA0000000000000000000113 /* PlanSheets.swift */,
-				AA0000000000000000000102 /* PlanView.swift */,
-			);
-			path = Plan;
-			sourceTree = "<group>";
-		};
 		AA0000000000000000000106 /* Onboarding */ = {
 			isa = PBXGroup;
 			children = (
 				AA0000000000000000000107 /* OnboardingFlow.swift */,
 			);
 			path = Onboarding;
-			sourceTree = "<group>";
-		};
-		AA0000000000000000000109 /* Vehicle */ = {
-			isa = PBXGroup;
-			children = (
-				AA000000000000000000010A /* CarEntryView.swift */,
-				A1DB00C7B292CDFAE57AB0B9 /* EditVehicleSheet.swift */,
-			);
-			path = Vehicle;
-			sourceTree = "<group>";
-		};
-		AA000000000000000000010E /* Components */ = {
-			isa = PBXGroup;
-			children = (
-				AA000000000000000000010F /* BreakdownSheet.swift */,
-			);
-			path = Components;
-			sourceTree = "<group>";
-		};
-		AA0000000000000000000115 /* Money */ = {
-			isa = PBXGroup;
-			children = (
-				AA0000000000000000000116 /* MoneyView.swift */,
-			);
-			path = Money;
-			sourceTree = "<group>";
-		};
-		AA0000000000000000000118 /* Ask */ = {
-			isa = PBXGroup;
-			children = (
-				AA000000000000000000011B /* AskModels.swift */,
-				AA0000000000000000000119 /* AskView.swift */,
-			);
-			path = Ask;
-			sourceTree = "<group>";
-		};
-		AA000000000000000000011D /* Spending */ = {
-			isa = PBXGroup;
-			children = (
-				AA000000000000000000011E /* SpendingHostView.swift */,
-			);
-			path = Spending;
-			sourceTree = "<group>";
-		};
-		AA0000000000000000000120 /* Investing */ = {
-			isa = PBXGroup;
-			children = (
-				AA0000000000000000000121 /* InvestingView.swift */,
-			);
-			path = Investing;
 			sourceTree = "<group>";
 		};
 		C786EA723E019294E6D5B58F /* Billing */ = {
@@ -416,6 +259,9 @@
 			);
 			dependencies = (
 			);
+			fileSystemSynchronizedGroups = (
+				FD5A4ED0000000000000A002 /* FolioWidgetShared */,
+			);
 			name = FolioWidgets;
 			productName = FolioWidgets;
 			productReference = E186547C3473C27CA4F71538 /* FolioWidgets.appex */;
@@ -434,6 +280,10 @@
 			);
 			dependencies = (
 				ED9590643D18E846F5B2AFFC /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				FD5A4ED0000000000000A001 /* FolioShared */,
+				FD5A4ED0000000000000A002 /* FolioWidgetShared */,
 			);
 			name = FolioFinance;
 			packageProductDependencies = (
@@ -493,6 +343,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA0000000000000000000031 /* Assets.xcassets in Resources */,
+				AA00000000000000000F0032 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -503,39 +354,16 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AA0000000000000000000122 /* InvestingView.swift in Sources */,
-				AA000000000000000000011F /* SpendingHostView.swift in Sources */,
-				AA000000000000000000011C /* AskModels.swift in Sources */,
-				AA000000000000000000011A /* AskView.swift in Sources */,
-				AA0000000000000000000117 /* MoneyView.swift in Sources */,
-				AA0000000000000000000114 /* PlanSheets.swift in Sources */,
-				AA0000000000000000000112 /* SummarySheets.swift in Sources */,
-				AA0000000000000000000110 /* BreakdownSheet.swift in Sources */,
-				AA000000000000000000010D /* TransactionDetailView.swift in Sources */,
-				AA000000000000000000010B /* CarEntryView.swift in Sources */,
 				AA0000000000000000000108 /* OnboardingFlow.swift in Sources */,
-				AA0000000000000000000105 /* Insights.swift in Sources */,
-				AA0000000000000000000103 /* PlanView.swift in Sources */,
 				AA0000000000000000000020 /* FolioFinanceApp.swift in Sources */,
 				AA0000000000000000000021 /* APIClient.swift in Sources */,
-				AA0000000000000000000022 /* Endpoints.swift in Sources */,
 				AA0000000000000000000023 /* AuthManager.swift in Sources */,
 				AA0000000000000000000024 /* KeychainService.swift in Sources */,
 				AA0000000000000000000025 /* LoginView.swift in Sources */,
+				AA00000000000000000F0012 /* ForgotPasswordView.swift in Sources */,
 				AA0000000000000000000026 /* MainTabView.swift in Sources */,
-				AA0000000000000000000027 /* Theme.swift in Sources */,
-				AA0000000000000000000028 /* OverviewView.swift in Sources */,
-				AA0000000000000000000029 /* AccountsView.swift in Sources */,
-				AA000000000000000000002A /* TransactionsView.swift in Sources */,
-				AA000000000000000000002B /* BudgetView.swift in Sources */,
-				AA000000000000000000002C /* Account.swift in Sources */,
-				AA000000000000000000002D /* Transaction.swift in Sources */,
-				AA000000000000000000002E /* PlaidItem.swift in Sources */,
 				AA0000000000000000000030 /* PlaidLinkSheet.swift in Sources */,
-				32B0BE3F0831ED0599E3D393 /* WidgetSnapshot.swift in Sources */,
-				65BB346EAF6A169CC41F67A6 /* Motion.swift in Sources */,
 				992D2A2A6B5789DA3116E58B /* SettingsView.swift in Sources */,
-				D3F6146D191C97FA4CC6EE7D /* EditVehicleSheet.swift in Sources */,
 				8660647869185EB6CB5D0027 /* BillingManager.swift in Sources */,
 				37AE682E03B5017F5D1EE300 /* PaywallView.swift in Sources */,
 			);
@@ -546,7 +374,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				20BAC7B40D595591BCDAAEA7 /* FolioWidgets.swift in Sources */,
-				A1CB8BD672669AFC2B600B15 /* WidgetSnapshot.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

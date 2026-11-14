@@ -84,6 +84,7 @@ struct SettingsView: View {
 
                 Section {
                     Toggle(isOn: $hide) { Label("Hide amounts", systemImage: "eye.slash") }
+                    AppearancePicker()
                     Toggle(isOn: Binding(get: { ask.enabled }, set: { on in Task { _ = await ask.set(on, auth: auth) } })) {
                         Label("Ask Folio", systemImage: "text.bubble")
                     }
@@ -165,5 +166,27 @@ struct SettingsView: View {
     private func load() async {
         if let r: AccountsResponse = try? await auth.withFreshToken(.accounts) { accountCount = r.accounts.count }
         if !auth.isDemo, let r: PlaidItemsResponse = try? await auth.withFreshToken(.plaidItems) { banks = r.items }
+    }
+}
+
+// MARK: - Profile menu (Folio's own; Folio Desktop has its own too, because Settings differs)
+
+struct ProfileMenu: View {
+    @EnvironmentObject private var auth: AuthManager
+    @AppStorage("hideAmounts") private var hide = false
+    @State private var showSettings = false
+
+    var body: some View {
+        Menu {
+            Section(auth.isDemo ? "Sample data" : (auth.currentEmail ?? "Your account")) {
+                if auth.isDemo { Text("Changes aren't saved in demo mode") }
+            }
+            Button { showSettings = true } label: { Label("Settings and account", systemImage: "gearshape") }
+            Toggle(isOn: $hide) { Label("Hide amounts", systemImage: "eye.slash") }
+        } label: {
+            Image(systemName: "person.crop.circle")
+                .accessibilityLabel("Account and settings")
+        }
+        .sheet(isPresented: $showSettings) { SettingsView() }
     }
 }

@@ -84,24 +84,6 @@ actor APIClient {
     }
 }
 
-enum APIError: LocalizedError {
-    case invalidResponse
-    case unauthorized
-    case conflict
-    case server(Int, String?)
-    case network
-
-    var errorDescription: String? {
-        switch self {
-        case .network: return "Couldn't reach Folio. Check your connection and try again."
-        case .invalidResponse: return "Invalid server response."
-        case .unauthorized: return "Session expired. Please log in again."
-        case .conflict: return "That email is already registered."
-        case .server(_, let msg): return msg ?? "Something went wrong."
-        }
-    }
-}
-
 private struct ErrorResponse: Decodable {
     let error: String
 }

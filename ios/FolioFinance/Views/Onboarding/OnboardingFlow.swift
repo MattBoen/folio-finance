@@ -166,15 +166,16 @@ private struct SecondaryButton: View {
 private struct WelcomeStep: View {
     let next: () -> Void
     var body: some View {
-        StepScaffold(title: "Welcome to Folio", subtitle: "A calm, complete picture of your money. Setup takes about two minutes.") {
+        StepScaffold(title: "Welcome to Folio", subtitle: "See what you have, what you spend and what's coming, without a spreadsheet. Setup takes about two minutes.") {
             VStack(spacing: 22) {
                 BrandMark(size: 76).frame(maxWidth: .infinity)
-                Pill(symbol: "square.stack.3d.up.fill", color: .blue, title: "Everything in one place", detail: "Bank accounts, cards, investments, loans and even your car.")
-                Pill(symbol: "chart.line.uptrend.xyaxis", color: .green, title: "Know where you stand", detail: "Net worth, spending and trends that update on their own.")
-                Pill(symbol: "checklist", color: .indigo, title: "A plan that fits you", detail: "Folio works out your income and usual spending, then drafts a budget you can change.")
+                Pill(symbol: "calendar.badge.clock", color: .orange, title: "Never get surprised by a bill", detail: "Folio finds your bills and subscriptions on its own and shows what's due next and what they cost a year.")
+                Pill(symbol: "square.stack.3d.up.fill", color: .blue, title: "Your whole picture in one place", detail: "Bank accounts, cards, investments, loans and even your car, with net worth that updates itself.")
+                Pill(symbol: "checklist", color: .indigo, title: "A budget that builds itself", detail: "Folio works out your income and usual spending, then drafts a budget you can change.")
             }
         } footer: {
             PrimaryButton(title: "Get started", action: next)
+            Text("Free for 7 days. Read-only access. Your data is never sold.").font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
         }
     }
 }
@@ -317,12 +318,13 @@ private struct PlanStep: View {
     let finish: () -> Void
     @EnvironmentObject private var auth: AuthManager
     @State private var insights: Insights?
+    @State private var found: Recurring?
     @State private var stage = 0
     @State private var showIncome = false
     @State private var budgetMade = false
     @State private var error: String?
 
-    private let stages = ["Pulling in your transactions", "Finding your income", "Adding up your spending", "Building your budget"]
+    private let stages = ["Pulling in your transactions", "Finding your income", "Adding up your spending", "Finding your bills and subscriptions", "Building your budget"]
 
     var body: some View {
         StepScaffold(
@@ -362,6 +364,7 @@ private struct PlanStep: View {
             if i.dataQuality.transactionCount == 0 {
                 EmptyStateCard(symbol: "clock", title: "Not enough activity yet", message: "Once your accounts have a few weeks of transactions, Folio fills in your plan automatically. You'll find it in the Budget tab.")
             } else {
+                if let f = found, !f.items.isEmpty { foundBills(f) }
                 Card {
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
@@ -402,11 +405,28 @@ private struct PlanStep: View {
         }
     }
 
+    /// The moment people see what Folio can do for them: the bills and subscriptions it found without being told.
+    private func foundBills(_ f: Recurring) -> some View {
+        let subs = f.items.filter(\.isSubscription)
+        return Card {
+            VStack(alignment: .leading, spacing: 10) {
+                Label("Found in your transactions", systemImage: "sparkles").font(.subheadline.weight(.semibold)).foregroundStyle(.orange)
+                Text("\(f.items.count) bills and subscriptions").font(.title2.bold())
+                Text("\(money(f.monthlyTotal)) a month, \(money(f.yearlyTotal)) a year" + (subs.isEmpty ? "" : ". \(subs.count) of them are subscriptions you can cancel (\(money(f.subscriptionsMonthly * 12)) a year).")).font(.footnote).foregroundStyle(.secondary)
+                ForEach(f.items.prefix(4)) { r in
+                    HStack { Text(r.name).font(.subheadline).lineLimit(1); Spacer(); Text((r.estimated ? "~" : "") + money(r.amount, cents: true)).font(.subheadline.weight(.semibold)).monospacedDigit() }
+                }
+                if f.items.count > 4 { Text("and \(f.items.count - 4) more, in Overview under Coming up").font(.footnote).foregroundStyle(.secondary) }
+            }
+        }
+    }
+
     private func run() async {
         async let fetched: Insights? = fetchInsights()
         // The last step waits for the real answer, so the checklist never finishes before the work does.
         for s in 1..<stages.count { try? await Task.sleep(for: .milliseconds(650)); withAnimation { stage = s } }
         var result = await fetched
+        found = try? await auth.withFreshToken(.recurring)
         if let r = result, !r.budget.items.isEmpty { budgetMade = await createBudget() }
         if budgetMade, let again: Insights = try? await auth.withFreshToken(.insights) { result = again }
         withAnimation { stage = stages.count }
