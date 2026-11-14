@@ -111,7 +111,7 @@ struct AskView: View {
             Card {
                 VStack(alignment: .leading, spacing: 10) {
                     Label("How your data is used", systemImage: "hand.raised.fill").font(.headline)
-                    Text("Your question and the figures needed to answer it go to Anthropic, the company that makes Claude. We never send your name, email or bank logins, and questions aren't saved on our servers.")
+                    Text("Your question and the figures needed to answer it go to Anthropic, the company that makes Claude. Folio also uses it to sort which accounts are your emergency fund. We never send your name, email or bank logins, and questions aren't saved on our servers.")
                         .font(.subheadline).foregroundStyle(.secondary)
                     Link("Read the Privacy Policy", destination: AppLinks.privacy).font(.subheadline.weight(.semibold))
                 }

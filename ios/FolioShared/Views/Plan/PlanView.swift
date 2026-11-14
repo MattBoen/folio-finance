@@ -22,6 +22,7 @@ struct PlanView: View {
         }
         .onAppear { if insights == nil, let initial { insights = initial; loaded = true } }
         .task { await load() }
+        .onReceive(NotificationCenter.default.publisher(for: .healthChanged)) { _ in Task { await load() } }
     }
 
     private var core: some View {
@@ -70,7 +71,9 @@ struct PlanView: View {
             case .spending:
                 SpendingPatternBreakdown(insights: insights)
             case .health(let metric):
-                HealthBreakdown(metric: metric, insights: insights, hasAge: ageEntered > 0)
+                // Emergency fund has its own editable screen: which accounts count and what it's measured against.
+                if metric == .emergency { EmergencyFundView() }
+                else { HealthBreakdown(metric: metric, insights: insights, hasAge: ageEntered > 0) }
             }
         }
     }
@@ -166,7 +169,7 @@ struct PlanView: View {
             SectionTitle("How you're doing")
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible())], spacing: 12) {
                 healthTile(.savings, h.savingsRate.map { "\(Int(($0 * 100).rounded()))%" }, "of income kept", status: h.savingsRate.map { $0 >= 0.15 ? .good : $0 >= 0.05 ? .ok : .attention }, hint: "Many people aim for 15% or more")
-                healthTile(.emergency, h.emergencyFundMonths.map { String(format: "%.1f mo", $0) }, "of spending in cash", status: h.emergencyFundMonths.map { $0 >= 3 ? .good : $0 >= 1 ? .ok : .attention }, hint: "3 to 6 months is a common goal")
+                healthTile(.emergency, h.emergencyFundMonths.map { String(format: "%.1f mo", $0) }, "covered by your fund", status: h.emergencyFundMonths.map { $0 >= 3 ? .good : $0 >= 1 ? .ok : .attention }, hint: "3 to 6 months is a common goal")
                 healthTile(.credit, h.creditUtilization.map { "\(Int(($0 * 100).rounded()))%" }, "of card limits", status: h.creditUtilization.map { $0 <= 0.10 ? .good : $0 <= 0.30 ? .ok : .attention }, hint: "Under 30% helps your credit score")
                 healthTile(.debt, h.debtPaymentRatio.map { "\(Int(($0 * 100).rounded()))%" }, "of income", status: h.debtPaymentRatio.map { $0 <= 0.20 ? .good : $0 <= 0.36 ? .ok : .attention }, hint: "Lenders like to see under 36%")
             }

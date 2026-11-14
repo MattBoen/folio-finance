@@ -134,6 +134,9 @@ struct OverviewView: View {
             }
             .navigationTitle("Overview")
             .onReceive(NotificationCenter.default.publisher(for: .accountsChanged)) { _ in Task { await load() } }
+            .onReceive(NotificationCenter.default.publisher(for: .healthChanged)) { _ in
+                Task { if let i: Insights = try? await auth.withFreshToken(.insights) { withAnimation(.smooth) { insights = i } } }
+            }
             .toolbar {
                 #if !PERSONAL
                 ToolbarItem(placement: .topBarTrailing) {
