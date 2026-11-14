@@ -410,7 +410,7 @@ private struct PlanStep: View {
         let subs = f.items.filter(\.isSubscription)
         return Card {
             VStack(alignment: .leading, spacing: 10) {
-                Label("Found in your transactions", systemImage: "sparkles").font(.subheadline.weight(.semibold)).foregroundStyle(.orange)
+                Label("Found in your transactions", systemImage: "magnifyingglass").font(.subheadline.weight(.semibold)).foregroundStyle(.orange)
                 Text("\(f.items.count) bills and subscriptions").font(.title2.bold())
                 Text("\(money(f.monthlyTotal)) a month, \(money(f.yearlyTotal)) a year" + (subs.isEmpty ? "" : ". \(subs.count) of them are subscriptions you can cancel (\(money(f.subscriptionsMonthly * 12)) a year).")).font(.footnote).foregroundStyle(.secondary)
                 ForEach(f.items.prefix(4)) { r in

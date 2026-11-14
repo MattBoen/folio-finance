@@ -34,7 +34,7 @@ struct PlanView: View {
                         if let insights {
                             if insights.dataQuality.transactionCount == 0 && insights.income.source == "none" {
                                 EmptyStateCard(
-                                    symbol: "wand.and.stars",
+                                    symbol: "hourglass",
                                     title: "This builds as you go",
                                     message: "Connect an account or add a few transactions and Folio will work out your income, your usual spending, and how you're doing."
                                 )
@@ -401,7 +401,7 @@ struct EditBudgetSheet: View {
                 if !suggestions.isEmpty {
                     Section {
                         Button { redo() } label: {
-                            Label(redone ? "Folio redid it" : "Have Folio redo it", systemImage: redone ? "checkmark.circle.fill" : "wand.and.stars")
+                            Label(redone ? "Folio redid it" : "Have Folio redo it", systemImage: redone ? "checkmark.circle.fill" : "arrow.clockwise")
                                 .contentTransition(.symbolEffect(.replace))
                         }
                         .disabled(redone)

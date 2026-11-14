@@ -151,7 +151,8 @@ struct EmergencyFundView: View {
                         CountingText(money(a.balance)).font(.subheadline).foregroundStyle(.secondary).monospacedDigit().sensitive()
                     }
                     HStack(spacing: 4) {
-                        Image(systemName: a.source == "you" ? "person.fill" : a.source == "ai" ? "sparkles" : "wand.and.stars")
+                        // Only Ask Folio's own picks get its sparkles; rules and your choices are plain text.
+                        if a.source == "ai" { Image(systemName: "sparkles") }
                         Text(a.reason).lineLimit(2)
                     }
                     .font(.caption).foregroundStyle(a.source == "ai" ? Color.indigo : .secondary)

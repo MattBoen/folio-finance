@@ -114,7 +114,7 @@ struct IncomeBreakdown: View {
             tone: .plan,
             sections: [
                 BreakdownSection(title: "How we got this", rows: [
-                    BreakdownRow(symbol: inc.source == "manual" ? "pencil" : "wand.and.stars", color: .blue, title: how,
+                    BreakdownRow(symbol: inc.source == "manual" ? "pencil" : "arrow.down.circle.fill", color: .blue, title: how,
                                  subtitle: inc.source == "detected" ? "\(inc.confidence.capitalized) confidence · regular deposits over your recent history" : nil, value: "")
                 ]),
                 BreakdownSection(title: "Sources", rows: inc.sources.isEmpty

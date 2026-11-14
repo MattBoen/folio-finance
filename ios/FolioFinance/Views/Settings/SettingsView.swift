@@ -78,7 +78,7 @@ struct SettingsView: View {
                         dismiss()
                     } label: { Label("Manage accounts and banks", systemImage: "link") }
                     if !auth.isDemo {
-                        Button { showSetup = true } label: { Label("Run setup again", systemImage: "wand.and.stars") }
+                        Button { showSetup = true } label: { Label("Run setup again", systemImage: "arrow.counterclockwise") }
                     }
                 }
 

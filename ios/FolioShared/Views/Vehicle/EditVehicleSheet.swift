@@ -68,7 +68,7 @@ struct EditVehicleSheet: View {
                         Task { await reestimate() }
                     } label: {
                         HStack {
-                            if estimating { ProgressView() } else { Image(systemName: "wand.and.stars") }
+                            if estimating { ProgressView() } else { Image(systemName: "dollarsign.circle") }
                             Text("Estimate from the car's details")
                         }
                     }
