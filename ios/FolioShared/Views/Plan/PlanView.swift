@@ -57,7 +57,7 @@ struct PlanView: View {
             .environment(\.zoomNamespace, zoom)
             .sheet(item: $sheet) { kind in sheetContent(kind).zoomed(from: kind.id, in: zoom) }
             .sheet(isPresented: $showIncome) {
-                IncomeSheet(current: insights?.income.monthly ?? 0, isManual: insights?.income.source == "manual") { Task { await load() } }
+                IncomeSheet(current: insights?.income.monthly ?? 0, isManual: insights?.income.source == "manual") { NotificationCenter.default.post(name: .healthChanged, object: nil) }
             }
     }
 
@@ -72,7 +72,9 @@ struct PlanView: View {
                 SpendingPatternBreakdown(insights: insights)
             case .health(let metric):
                 // Emergency fund has its own editable screen: which accounts count and what it's measured against.
+                // Emergency fund and savings rate have their own editable screens.
                 if metric == .emergency { EmergencyFundView() }
+                else if metric == .savings { SavingsRateView() }
                 else { HealthBreakdown(metric: metric, insights: insights, hasAge: ageEntered > 0) }
             }
         }

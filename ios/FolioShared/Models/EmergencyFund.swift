@@ -56,3 +56,27 @@ extension Notification.Name {
     /// Something behind Money health changed (for example, which accounts are the emergency fund).
     static let healthChanged = Notification.Name("FolioHealthChanged")
 }
+
+/// Savings rate: income minus spending, as a share of income. Spending is measured the same way as the
+/// emergency fund (essentials, usual spending or budget) unless you pick something else for it.
+struct SavingsRate: Decodable, Sendable {
+    let income: Double
+    let incomeSource: String      // "detected" | "manual" | "none"
+    var basis: String
+    let followsFund: Bool
+    let fundBasis: String
+    let monthly: EmergencyFund.Monthly
+    let spending: Double
+    let leftOver: Double
+    let rate: Double?
+}
+
+extension Endpoint {
+    static var savingsRate: Endpoint { .get("/insights/savings-rate") }
+
+    /// "essentials" | "usual" | "budget", or "match" to follow the emergency fund again.
+    static func saveSavingsRate(basis: String) -> Endpoint {
+        struct Body: Encodable { let basis: String }
+        return .put("/insights/savings-rate", body: Body(basis: basis))
+    }
+}
